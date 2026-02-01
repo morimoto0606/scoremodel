@@ -1,0 +1,31 @@
+{
+  "name": "scoremodel-tf24",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceFolder": "/work",
+
+  "runArgs": ["--platform=linux/amd64"],
+
+  "mounts": [
+    "type=bind,source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent",
+    "type=volume,source=pip-cache,target=/root/.cache/pip"
+  ],
+  "remoteEnv": {
+    "SSH_AUTH_SOCK": "/ssh-agent"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+
+  "postCreateCommand": "bash -lc 'python -m pip install -U \"pip<24\" \"setuptools<70\" wheel && pip install -r requirements.txt && pip install -e .'",
+  "remoteUser": "root"
+}
