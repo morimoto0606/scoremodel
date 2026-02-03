@@ -1,3 +1,6 @@
 [submodule "upstream/score_sde_pytorch"]
 	path = upstream/score_sde_pytorch
 	url = git@github.com:yang-song/score_sde_pytorch.git
+[submodule "upstream/edm"]
+	path = upstream/edm
+	url = https://github.com/NVlabs/edm.git

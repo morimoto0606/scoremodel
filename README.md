@@ -196,3 +196,32 @@ Notes for future me
 - Prefer adapters or wrappers over patches
 - Treat requirements.txt as the single truth
 - If something becomes central, consider splitting it into its own repo
+
+---
+## CPU 環境で EDM を動かす方法（重要）
+-------------------
+
+### Step 1. CPU 用パッチを適用
+./scripts/patch_edm_cpu.sh
+
+mkdir -p results/edm/cifar10/test
+
+### Step 2. CIFAR-10 サンプル生成
+python upstream/edm/generate.py \
+  --outdir=results/edm/cifar10/test \
+  --seeds=0-3 \
+  --batch=4 \
+  --steps=18 \
+  --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl
+
+
+### Step3.  upstream をCleanに戻す
+cd upstream/edm
+git restore .
+cd ../..
+
+### Step4. 画像をグリッド表示する
+python scripts/make_grid.py \
+  --dir results/edm/cifar10/test \
+  --n 64 \
+  --out results/edm/cifar10/grid_8x8.png

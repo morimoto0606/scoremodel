@@ -1,13 +1,12 @@
 {
-  "name": "scoremodel-tf24",
+  "name": "scoremodel-torch-arm64",
   "build": { "dockerfile": "Dockerfile" },
-  "workspaceFolder": "/work",
-
-  "runArgs": ["--platform=linux/amd64"],
+  "workspaceFolder": "/workspaces/scoremodel",
+  "remoteUser": "vscode",
 
   "mounts": [
-    "type=bind,source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent",
-    "type=volume,source=pip-cache,target=/root/.cache/pip"
+    "type=bind,source=/run/host-services/ssh-auth.sock,target=/ssh-agent",
+    "type=volume,source=pip-cache,target=/home/vscode/.cache/pip"
   ],
   "remoteEnv": {
     "SSH_AUTH_SOCK": "/ssh-agent"
@@ -19,13 +18,9 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-toolsai.jupyter"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python"
-      }
+      ]
     }
   },
 
-  "postCreateCommand": "bash -lc 'python -m pip install -U \"pip<24\" \"setuptools<70\" wheel && pip install -r requirements.txt && pip install -e .'",
-  "remoteUser": "root"
+  "postCreateCommand": "bash -lc 'cd /workspaces/scoremodel && python -m pip install -U pip setuptools wheel && pip install -r requirements.txt && pip install -e . && python -c \"import torch; print(\\\"torch\\\", torch.__version__)\"'"
 }

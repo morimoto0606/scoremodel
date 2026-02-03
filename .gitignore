@@ -1,0 +1,28 @@
+# ==== Python ====
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+
+# ==== Virtual env / build ====
+.env
+.venv
+build/
+dist/
+
+# ==== Jupyter ====
+.ipynb_checkpoints/
+
+# ==== Experiment outputs ====
+results/
+
+# ==== OS ====
+.DS_Store
+
+# ==== VS Code ====
+.vscode/
+
+# ==== Temporary ====
+tmp/
+cache/
