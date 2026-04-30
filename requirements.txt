@@ -2,8 +2,15 @@
 numpy
 scipy
 pandas
+matplotlib
+scikit-learn
 tqdm
 pyyaml
+click
+pillow
+datasets
+genaibook
+pyarrow
 
 # torch
 torch
@@ -13,6 +20,7 @@ torchvision
 ipykernel
 jupyter
 rich
+plotly
 
 # misc (often useful)
 einops

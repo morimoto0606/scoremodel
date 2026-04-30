@@ -4,3 +4,6 @@
 [submodule "upstream/edm"]
 	path = upstream/edm
 	url = https://github.com/NVlabs/edm.git
+[submodule "upstream/ER-SDE-Solver"]
+	path = upstream/ER-SDE-Solver
+	url = https://github.com/QinpengCui/ER-SDE-Solver.git

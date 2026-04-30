@@ -4,6 +4,12 @@
   "workspaceFolder": "/workspaces/scoremodel",
   "remoteUser": "vscode",
 
+  "runArgs": [
+    "--memory=14g",
+    "--cpus=8",
+    "--memory-swap=18g"
+  ],
+
   "mounts": [
     "type=bind,source=/run/host-services/ssh-auth.sock,target=/ssh-agent",
     "type=volume,source=pip-cache,target=/home/vscode/.cache/pip"

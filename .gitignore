@@ -17,6 +17,9 @@ dist/
 # ==== Experiment outputs ====
 results/
 
+# ==== HuggingFace cache ====
+**/hf_cache/
+
 # ==== OS ====
 .DS_Store
 
