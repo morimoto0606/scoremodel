@@ -1,21 +1,21 @@
 {
-  "name": "scoremodel-torch-arm64",
+  "name": "scoremodel-torch-cuda",
   "build": { "dockerfile": "Dockerfile" },
   "workspaceFolder": "/workspaces/scoremodel",
   "remoteUser": "vscode",
 
   "runArgs": [
+    "--gpus=all",
     "--memory=14g",
     "--cpus=8",
     "--memory-swap=18g"
   ],
 
   "mounts": [
-    "type=bind,source=/run/host-services/ssh-auth.sock,target=/ssh-agent",
     "type=volume,source=pip-cache,target=/home/vscode/.cache/pip"
   ],
   "remoteEnv": {
-    "SSH_AUTH_SOCK": "/ssh-agent"
+    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}"
   },
 
   "customizations": {
@@ -28,5 +28,5 @@
     }
   },
 
-  "postCreateCommand": "bash -lc 'cd /workspaces/scoremodel && python -m pip install -U pip setuptools wheel && pip install -r requirements.txt && pip install -e . && python -c \"import torch; print(\\\"torch\\\", torch.__version__)\"'"
+  "postCreateCommand": "bash -lc 'cd /workspaces/scoremodel && python -m pip install -U pip setuptools wheel && pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 && pip install -r requirements.txt && pip install -e . && python -c \"import torch; print(\\\"torch\\\", torch.__version__, \\\"cuda:\\\", torch.cuda.is_available())\"'"
 }

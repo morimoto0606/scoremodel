@@ -162,12 +162,13 @@ from matplotlib import pyplot as plt
 from torch.nn import functional as F
 from tqdm.notebook import tqdm, trange
 
-from genaibook.core import get_device
-
 num_epochs = 2
 lr = 1e-4
 
-device = get_device()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+#%%
 model = model.to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr, eps=1e-5)
 
