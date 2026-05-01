@@ -15,7 +15,6 @@ dist/
 .ipynb_checkpoints/
 
 # ==== Experiment outputs ====
-results/
 
 # ==== HuggingFace cache ====
 **/hf_cache/
