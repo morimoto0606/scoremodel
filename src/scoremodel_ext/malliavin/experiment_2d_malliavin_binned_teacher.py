@@ -360,9 +360,9 @@ def run():
 
     X_T, H, centers0, stats = simulate_2d_malliavin_ito(
         n_paths=300_000,
-        T=1.0,
+        T=0.35,
         n_steps=120,
-        sigma=0.8,
+        sigma=0.45,
         gamma_reg=1e-3,
         device=device,
     )
