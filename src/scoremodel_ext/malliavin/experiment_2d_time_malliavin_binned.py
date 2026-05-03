@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+import math
 
 import torch
 import matplotlib
@@ -10,10 +11,10 @@ plt.style.use("seaborn-v0_8")
 
 try:
     from .models import TimeScoreMLP2D
-    from .sde_2d import simulate_2d_malliavin_ito, bin_teacher_2d
+    from .sde_2d import sample_8gmm, drift, simulate_2d_malliavin_ito, bin_teacher_2d, sigma_schedule
 except ImportError:
     from models import TimeScoreMLP2D
-    from sde_2d import simulate_2d_malliavin_ito, bin_teacher_2d
+    from sde_2d import sample_8gmm, drift, simulate_2d_malliavin_ito, bin_teacher_2d, sigma_schedule
 
 
 # =====================================================
@@ -38,7 +39,8 @@ def build_dataset(
             T=T,
             n_paths=250_000,
             n_steps=120,
-            sigma=0.45,
+            sigma_min=0.15,
+            sigma_max=1.20,
             gamma_reg=1e-3,
             device=device,
         )
@@ -166,6 +168,66 @@ def plot_snapshot(model, T, path, device="cuda"):
     plt.close()
     print(f"saved: {path}")
 
+# =====================================================
+# forward samples
+# =====================================================
+@torch.no_grad()
+def plot_forward_samples(
+    T,
+    path,
+    n_samples=30_000,
+    n_steps=120,
+    sigma=0.45,
+    sigma_min=None,
+    sigma_max=None,
+    device="cuda",
+):
+    dt = T / n_steps
+    sqrt_dt = math.sqrt(dt)
+
+    x, centers = sample_8gmm(n_samples, device=device)
+
+    for k in range(n_steps):
+        # midpoint time of kth interval [k*dt, (k+1)*dt]
+        t_mid = (k + 0.5) * dt
+
+        sigma_k = sigma_schedule(
+            t_mid,
+            T,
+            sigma=sigma,
+            sigma_min=sigma_min,
+            sigma_max=sigma_max,
+        )
+
+        dW = sqrt_dt * torch.randn_like(x)
+
+        x = x + drift(x) * dt + sigma_k * dW
+
+    plt.figure(figsize=(7, 7))
+    plt.scatter(
+        x[:, 0].detach().cpu(),
+        x[:, 1].detach().cpu(),
+        s=2,
+        alpha=0.20,
+        label=f"X_T samples, T={T:.2f}",
+    )
+    plt.scatter(
+        centers[:, 0].detach().cpu(),
+        centers[:, 1].detach().cpu(),
+        s=90,
+        marker="x",
+        label="initial modes",
+    )
+    plt.xlim(-3.2, 3.2)
+    plt.ylim(-3.2, 3.2)
+    plt.gca().set_aspect("equal")
+    plt.title(f"Forward samples at T={T:.2f}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(path, dpi=220)
+    plt.close()
+    print(f"saved: {path}")
+
 
 # =====================================================
 # run
@@ -177,13 +239,11 @@ def run():
 
     times = [0.05, 0.10, 0.20, 0.35, 0.50, 0.75, 1.00]
 
-    t, x, s, c = build_dataset(times, device=device)
-
-    model = train_model(t, x, s, c, device=device)
-
     outdir = Path("results/2d_time_malliavin_binned")
     outdir.mkdir(parents=True, exist_ok=True)
 
+    t, x, s, c = build_dataset(times, device=device)
+    model = train_model(t, x, s, c, device=device)
     torch.save(
         {
             "model_state_dict": model.state_dict(),
@@ -191,8 +251,6 @@ def run():
         },
         outdir / "time_score_mlp_2d.pt",
     )
-
-    print(f"saved: {outdir / 'time_score_mlp_2d.pt'}")
 
     for T in times:
         plot_snapshot(
@@ -202,6 +260,15 @@ def run():
             device=device,
         )
 
+    for T in times:
+        
+        plot_forward_samples(
+            T,
+            outdir / f"forward_samples_T_{T:.2f}.png",
+            sigma_min=0.15,
+            sigma_max=1.20,
+            device=device,
+        )
 
 if __name__ == "__main__":
     run()

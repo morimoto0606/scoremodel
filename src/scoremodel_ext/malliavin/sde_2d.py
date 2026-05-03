@@ -27,12 +27,26 @@ def jac_drift(x):
     return -(0.1 + 0.01 * r2)[:, None, None] * I - 0.02 * outer
 
 
+def sigma_schedule(t, T, sigma=0.45, sigma_min=None, sigma_max=None):
+    """
+    If sigma_min/sigma_max are None, use constant sigma.
+    Otherwise use linear schedule:
+        sigma(t) = sigma_min + (sigma_max - sigma_min) * t/T
+    """
+    if sigma_min is None or sigma_max is None:
+        return sigma
+
+    return sigma_min + (sigma_max - sigma_min) * (t / T)
+
+
 @torch.no_grad()
 def simulate_2d_malliavin_ito(
     n_paths=300_000,
     T=0.35,
     n_steps=120,
     sigma=0.45,
+    sigma_min=None,
+    sigma_max=None,
     gamma_reg=1e-3,
     device="cuda",
 ):
@@ -45,9 +59,21 @@ def simulate_2d_malliavin_ito(
 
     Y_list = []
     dW_list = []
+    sigma_list = []
 
-    for _ in range(n_steps):
+    # forward simulation
+    for k in range(n_steps):
+        t_mid = (k + 0.5) * dt
+        sigma_k = sigma_schedule(
+            t_mid,
+            T,
+            sigma=sigma,
+            sigma_min=sigma_min,
+            sigma_max=sigma_max,
+        )
+
         Y_list.append(Y)
+        sigma_list.append(sigma_k)
 
         dW = sqrt_dt * torch.randn(n_paths, 2, device=device)
         dW_list.append(dW)
@@ -55,7 +81,7 @@ def simulate_2d_malliavin_ito(
         x_old = x
         Y_old = Y
 
-        x = x_old + drift(x_old) * dt + sigma * dW
+        x = x_old + drift(x_old) * dt + sigma_k * dW
 
         J = jac_drift(x_old)
         Y = Y_old + torch.bmm(J, Y_old) * dt
@@ -63,38 +89,54 @@ def simulate_2d_malliavin_ito(
     X_T = x
     Y_T = Y
 
+    # Malliavin covariance
     core = torch.zeros(n_paths, 2, 2, device=device)
     invY_list = []
 
-    for Ys in Y_list:
+    for Ys, sigma_k in zip(Y_list, sigma_list):
         invYs = torch.linalg.inv(Ys)
         invY_list.append(invYs)
-        core += sigma**2 * torch.bmm(invYs, invYs.transpose(1, 2)) * dt
+
+        core += (
+            sigma_k**2
+            * torch.bmm(invYs, invYs.transpose(1, 2))
+            * dt
+        )
 
     gamma = torch.bmm(torch.bmm(Y_T, core), Y_T.transpose(1, 2))
 
     eye = torch.eye(2, device=device).expand(n_paths, 2, 2)
     gamma_inv = torch.linalg.inv(gamma + gamma_reg * eye)
 
+    # Ito Malliavin weight
     delta = torch.zeros(n_paths, 2, device=device)
 
-    for invYs, dW in zip(invY_list, dW_list):
-        DsXT = sigma * torch.bmm(Y_T, invYs)
+    for invYs, dW, sigma_k in zip(invY_list, dW_list, sigma_list):
+        # D_s X_T = Y_T Y_s^{-1} sigma_s
+        DsXT = sigma_k * torch.bmm(Y_T, invYs)
+
+        # U_s = (D_s X_T)^T gamma^{-1}
         U = torch.bmm(DsXT.transpose(1, 2), gamma_inv)
+
         delta += torch.bmm(U.transpose(1, 2), dW[:, :, None]).squeeze(-1)
 
     H = -delta
 
+    eigvals = torch.linalg.eigvalsh(gamma)
+
     stats = {
         "X_mean": X_T.mean(dim=0).detach().cpu(),
         "X_std": X_T.std(dim=0).detach().cpu(),
-        "gamma_min_eig": torch.linalg.eigvalsh(gamma).min().item(),
+        "gamma_min_eig": eigvals.min().item(),
         "gamma_trace_mean": gamma.diagonal(dim1=1, dim2=2).sum(dim=1).mean().item(),
         "H_norm_mean": H.norm(dim=1).mean().item(),
         "H_norm_std": H.norm(dim=1).std().item(),
+        "sigma_min": sigma_min if sigma_min is not None else sigma,
+        "sigma_max": sigma_max if sigma_max is not None else sigma,
     }
 
     return X_T, H, centers0, stats
+
 
 
 @torch.no_grad()
