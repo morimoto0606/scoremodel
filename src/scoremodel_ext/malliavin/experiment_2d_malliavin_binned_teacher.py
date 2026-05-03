@@ -21,16 +21,18 @@ def sample_8gmm(n, radius=2.0, std=0.08, device="cuda"):
 
 def drift(x):
     r2 = (x * x).sum(dim=1, keepdim=True)
-    return -x - r2 * x
+    return -0.1 * x - 0.01 * r2 * x
 
 
 def jac_drift(x):
     n = x.shape[0]
     device = x.device
     I = torch.eye(2, device=device).expand(n, 2, 2)
+
     r2 = (x * x).sum(dim=1)
     outer = x[:, :, None] * x[:, None, :]
-    return -(1.0 + r2)[:, None, None] * I - 2.0 * outer
+
+    return -(0.1 + 0.01 * r2)[:, None, None] * I - 0.02 * outer
 
 
 class ScoreMLP2D(nn.Module):
@@ -52,9 +54,9 @@ class ScoreMLP2D(nn.Module):
 
 def simulate_2d_malliavin_ito(
     n_paths=300_000,
-    T=1.0,
+    T=0.35,
     n_steps=120,
-    sigma=0.8,
+    sigma=0.45,
     gamma_reg=1e-3,
     device="cuda",
 ):
