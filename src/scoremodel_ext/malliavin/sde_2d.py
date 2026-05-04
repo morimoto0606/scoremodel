@@ -190,3 +190,73 @@ def bin_teacher_2d(
     cc = counts[valid]
 
     return pts, sc, cc
+
+
+@torch.no_grad()
+def nw_teacher_2d(X_T, H, query_x, bandwidth=None, batch_size=64):
+    """
+    Nadaraya-Watson Gaussian kernel regression for 2D score.
+
+    X_T      : (n, 2)  — forward-terminal samples
+    H        : (n, 2)  — per-path Malliavin weights
+    query_x  : (m, 2)  — query positions
+    bandwidth: float or None (Silverman's rule if None)
+
+    Returns score estimates at query_x: (m, 2)
+    """
+    device = X_T.device
+    n = X_T.shape[0]
+
+    if bandwidth is None:
+        # Silverman's rule for d=2: h = n^{-1/(d+4)} * sigma_mean
+        sigma_mean = float(X_T.std(dim=0).mean())
+        h = sigma_mean * float(n) ** (-1.0 / 6.0)
+    else:
+        h = float(bandwidth)
+
+    nq = query_x.shape[0]
+    score = torch.zeros(nq, 2, device=device)
+
+    for i in range(0, nq, batch_size):
+        xq = query_x[i : i + batch_size]                      # (b, 2)
+        diff = (xq[:, None, :] - X_T[None, :, :]) / h         # (b, n, 2)
+        kw = torch.exp(-0.5 * (diff * diff).sum(-1))           # (b, n)
+        denom = kw.sum(-1, keepdim=True).clamp_min(1e-12)      # (b, 1)
+        score[i : i + batch_size] = (kw[:, :, None] * H[None, :, :]).sum(1) / denom
+
+    return score
+
+
+@torch.no_grad()
+def knn_nw_teacher_2d(X_T, H, query_x, k=500, bandwidth_scale=1.0, batch_size=64):
+    """
+    kNN-adaptive Nadaraya-Watson kernel regression for 2D score.
+
+    Bandwidth for each query point = bandwidth_scale * distance to k-th nearest
+    training point.
+
+    X_T            : (n, 2)
+    H              : (n, 2)
+    query_x        : (m, 2)
+    k              : neighbourhood size
+    bandwidth_scale: scalar multiplier applied to the kNN distance (default 1.0)
+
+    Returns score estimates at query_x: (m, 2)
+    """
+    device = X_T.device
+    k = min(k, X_T.shape[0])
+
+    nq = query_x.shape[0]
+    score = torch.zeros(nq, 2, device=device)
+
+    for i in range(0, nq, batch_size):
+        xq = query_x[i : i + batch_size]                      # (b, 2)
+        diff = xq[:, None, :] - X_T[None, :, :]               # (b, n, 2)
+        dist2 = (diff * diff).sum(-1)                          # (b, n)
+        dist = dist2.sqrt()                                    # (b, n)
+        h = (dist.kthvalue(k, dim=1).values * bandwidth_scale).clamp_min(1e-8)  # (b,)
+        kw = torch.exp(-0.5 * (dist / h[:, None]) ** 2)       # (b, n)
+        denom = kw.sum(-1, keepdim=True).clamp_min(1e-12)
+        score[i : i + batch_size] = (kw[:, :, None] * H[None, :, :]).sum(1) / denom
+
+    return score

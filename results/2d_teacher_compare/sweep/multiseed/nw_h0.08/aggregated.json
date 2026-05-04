@@ -1,0 +1,18 @@
+{
+  "config": {
+    "family": "nw",
+    "bandwidth": 0.08,
+    "k": null,
+    "bandwidth_scale": 1.0
+  },
+  "group": "sweep_top5",
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "mmd_rbf_mean": 0.002329908917065878,
+  "mmd_rbf_std": 0.00027731192686112884,
+  "sliced_wasserstein_mean": 0.14793389524799935,
+  "sliced_wasserstein_std": 0.0017539992098409827
+}

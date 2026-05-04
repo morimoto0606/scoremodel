@@ -1,0 +1,32 @@
+{
+  "nw": {
+    "label": "nw_h0.08",
+    "config": {
+      "family": "nw",
+      "bandwidth": 0.08,
+      "k": null,
+      "bandwidth_scale": 1.0
+    },
+    "mmd_rbf": 0.0021230142406672425,
+    "sliced_wasserstein": 0.14839455621119307,
+    "nan_rate": 0.0,
+    "n_samples": 30000,
+    "mode_coverage_fraction": 1.0,
+    "nearest_mode_dist_mean": 0.46359750628471375
+  },
+  "knn_nw": {
+    "label": "knn_k512_s0.50",
+    "config": {
+      "family": "knn_nw",
+      "bandwidth": null,
+      "k": 512,
+      "bandwidth_scale": 0.5
+    },
+    "mmd_rbf": 0.0019307946957529687,
+    "sliced_wasserstein": 0.14500594469106473,
+    "nan_rate": 0.0,
+    "n_samples": 30000,
+    "mode_coverage_fraction": 1.0,
+    "nearest_mode_dist_mean": 0.4565287232398987
+  }
+}

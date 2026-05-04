@@ -1,0 +1,48 @@
+{
+  "8gmm": {
+    "ve": {
+      "raw": {
+        "nan_rate": 0.0,
+        "n_samples": 20000,
+        "mmd_rbf": 0.07290245592594147,
+        "sliced_wasserstein": 2.0280057651347754,
+        "mode_coverage": {
+          "n_covered": 8,
+          "n_modes": 8,
+          "coverage_fraction": 1.0,
+          "min_proportion": 0.12,
+          "max_proportion": 0.12905,
+          "mean_nearest_dist": 1.6854881048202515
+        }
+      },
+      "binned": {
+        "nan_rate": 0.0,
+        "n_samples": 20000,
+        "mmd_rbf": 0.07141447067260742,
+        "sliced_wasserstein": 1.9622401741724012,
+        "mode_coverage": {
+          "n_covered": 8,
+          "n_modes": 8,
+          "coverage_fraction": 1.0,
+          "min_proportion": 0.1214,
+          "max_proportion": 0.1296,
+          "mean_nearest_dist": 1.6025993824005127
+        }
+      },
+      "knn_nw": {
+        "nan_rate": 0.0,
+        "n_samples": 20000,
+        "mmd_rbf": 0.07364210486412048,
+        "sliced_wasserstein": 2.0231942647018895,
+        "mode_coverage": {
+          "n_covered": 8,
+          "n_modes": 8,
+          "coverage_fraction": 1.0,
+          "min_proportion": 0.1213,
+          "max_proportion": 0.1289,
+          "mean_nearest_dist": 1.6806637048721313
+        }
+      }
+    }
+  }
+}
