@@ -44,6 +44,7 @@ try:
         simulate_malliavin_nl,
         simulate_forward_nl,
         reverse_euler_nl,
+        sample_stationary_nl,
     )
     from .experiment_mirafzali import (
         _mmd_rbf,
@@ -293,6 +294,7 @@ def run_experiment_nl(
     outbase: str = "results/mirafzali_nonlinear",
     device: Optional[str] = None,
     seed: int = 0,
+    reverse_init: str = "stationary",
 ) -> dict:
     """
     Full pipeline for one (dataset, method) combination with the nonlinear SDE.
@@ -350,8 +352,14 @@ def run_experiment_nl(
         n_epochs=n_epochs, batch_size=batch_size, lr=lr, device=device,
     )
     torch.save(
-        {"model_state_dict": model.state_dict(),
-         "dataset": dataset, "method": method, "sde": "nonlinear"},
+        {
+            "model_state_dict": model.state_dict(),
+            "dataset": dataset,
+            "method": method,
+            "sde": "nonlinear",
+            "reverse_init": reverse_init,
+            "cfg": cfg.__dict__ if hasattr(cfg, "__dict__") else str(cfg),
+        },
         outdir / "model.pt",
     )
 
@@ -360,13 +368,36 @@ def run_experiment_nl(
     model.eval()
     model = model.to(device)
 
-    # Get X_T starting points via cheap forward simulation
+    # Choose reverse initial distribution.
+    #
+    # Mirafzali nonlinear sampling starts from the stationary distribution.
+    # The old "forward_terminal" option is a reconstruction / consistency test:
+    #   X0 ~ data -> forward -> X_T -> reverse -> X0.
     sampler = get_sampler(dataset)
-    result  = sampler(n_samples_reverse, device=device)
-    X0_rev  = result[0] if isinstance(result, tuple) else result
-
     n_steps_rev = _n_steps_for(cfg.T, n_steps_per_unit)
-    X_T_start   = simulate_forward_nl(X0_rev, cfg.T, cfg, n_steps=n_steps_rev)
+
+    if reverse_init == "stationary":
+        X_T_start = sample_stationary_nl(
+            n_samples_reverse,
+            cfg,
+            dim=2,
+            device=device,
+            clamp=20.0,
+        )
+    elif reverse_init == "forward_terminal":
+        result = sampler(n_samples_reverse, device=device)
+        X0_rev = result[0] if isinstance(result, tuple) else result
+        X_T_start = simulate_forward_nl(
+            X0_rev,
+            cfg.T,
+            cfg,
+            n_steps=n_steps_rev,
+        )
+    else:
+        raise ValueError(
+            f"Unknown reverse_init={reverse_init!r}. "
+            "Use 'stationary' or 'forward_terminal'."
+        )
 
     samples = reverse_euler_nl(model, X_T_start, cfg, n_steps=n_steps_rev)
 
@@ -387,6 +418,7 @@ def run_experiment_nl(
         centers_np=centers_np,
         rng=np.random.default_rng(seed),
     )
+    metrics["reverse_init"] = reverse_init
     with open(outdir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
     print(

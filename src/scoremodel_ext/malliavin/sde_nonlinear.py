@@ -292,3 +292,40 @@ def reverse_euler_nl(
         x = torch.nan_to_num(x, nan=0.0)
 
     return x.cpu()
+
+
+@torch.no_grad()
+def sample_stationary_nl(
+    n_samples: int,
+    cfg: NonlinearSDEConfig,
+    dim: int = 2,
+    device: str = "cuda",
+    clamp: float = 20.0,
+):
+    """
+    Sample approximate stationary distribution for Mirafzali nonlinear SDE.
+
+    For the default setting k=1, sigma=1, a=0, each marginal is Cauchy-like:
+
+        p_s(x) ∝ [1 + (x-a)^2]^(-k/sigma^2)
+
+    For now we use the exact Cauchy sampler for the default k/sigma^2 = 1 case.
+    """
+    alpha = cfg.k / (cfg.sigma ** 2)
+
+    if abs(alpha - 1.0) > 1e-8:
+        print(
+            f"[warning] sample_stationary_nl currently uses Cauchy approximation; "
+            f"got k/sigma^2={alpha:.4f}"
+        )
+
+    loc = torch.tensor(float(cfg.a), device=device)
+    scale = torch.tensor(1.0, device=device)
+
+    dist = torch.distributions.Cauchy(loc=loc, scale=scale)
+    x = dist.sample((n_samples, dim))
+
+    if clamp is not None:
+        x = x.clamp(-clamp, clamp)
+
+    return x
