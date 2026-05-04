@@ -92,6 +92,64 @@ def _n_steps_for(T: float, n_steps_per_unit: int = _N_STEPS_PER_UNIT) -> int:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Teacher helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+@torch.no_grad()
+def _binned_score_at_points(
+    X_T: torch.Tensor,
+    H: torch.Tensor,
+    query_x: torch.Tensor,
+    n_bins: int = 60,
+    q_low: float = 0.005,
+    q_high: float = 0.995,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    For each point in *query_x*, return the bin-averaged score from (X_T, H).
+
+    The 2-D histogram is built from the [q_low, q_high] quantile range of X_T.
+    Query points outside that range are clamped to the nearest boundary bin.
+
+    Returns
+    -------
+    query_x : (m, 2) — same tensor passed in
+    sc      : (m, 2) — bin-averaged H at each query point
+    cc      : (m,)   — uniform weights (ones)
+    """
+    device = X_T.device
+    q = torch.tensor([q_low, q_high], device=device)
+
+    x_min, x_max = torch.quantile(X_T[:, 0], q)
+    y_min, y_max = torch.quantile(X_T[:, 1], q)
+
+    x_edges = torch.linspace(x_min.item(), x_max.item(), n_bins + 1, device=device)
+    y_edges = torch.linspace(y_min.item(), y_max.item(), n_bins + 1, device=device)
+    n_cells = n_bins * n_bins
+
+    # Bin ALL X_T to accumulate per-bin sums
+    x0_all = X_T[:, 0].contiguous()
+    x1_all = X_T[:, 1].contiguous()
+    ix_all = (torch.bucketize(x0_all, x_edges) - 1).clamp(0, n_bins - 1)
+    iy_all = (torch.bucketize(x1_all, y_edges) - 1).clamp(0, n_bins - 1)
+    flat_all = ix_all * n_bins + iy_all
+
+    counts = torch.bincount(flat_all, minlength=n_cells).float()
+    sum0   = torch.bincount(flat_all, weights=H[:, 0].contiguous(), minlength=n_cells)
+    sum1   = torch.bincount(flat_all, weights=H[:, 1].contiguous(), minlength=n_cells)
+    avg_h0 = sum0 / counts.clamp_min(1.0)
+    avg_h1 = sum1 / counts.clamp_min(1.0)
+
+    # Look up bin average for each query point
+    ix_q   = (torch.bucketize(query_x[:, 0].contiguous(), x_edges) - 1).clamp(0, n_bins - 1)
+    iy_q   = (torch.bucketize(query_x[:, 1].contiguous(), y_edges) - 1).clamp(0, n_bins - 1)
+    flat_q = ix_q * n_bins + iy_q
+
+    sc = torch.stack([avg_h0[flat_q], avg_h1[flat_q]], dim=1)
+    cc = torch.ones(query_x.shape[0], device=device)
+    return query_x, sc, cc
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Teacher methods
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -104,6 +162,7 @@ def apply_teacher_nl(
     min_count: int = 20,
     knn_k: int = 256,
     bandwidth_scale: float = 1.0,
+    teacher_eval_points: str = "raw_points",
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Apply a teacher to (X_T, H) pairs from the nonlinear SDE simulation.
@@ -113,6 +172,13 @@ def apply_teacher_nl(
     method : "raw" | "binned" | "nw" | "knn_nw"
     X_T    : (n, 2) terminal forward samples
     H      : (n, 2) Malliavin score weights
+    teacher_eval_points : "raw_points" | "grid_centers"
+        "raw_points"   — all methods share the same *n_raw* subsampled X_T
+                         query points; only the score estimation strategy
+                         differs.  This ensures a fair, equal-count comparison.
+        "grid_centers" — binned/nw/knn_nw use 2-D histogram bin centres as
+                         query points (original behaviour); raw uses subsampled
+                         X_T.
 
     Returns
     -------
@@ -120,6 +186,40 @@ def apply_teacher_nl(
     scores : (m, 2) estimated scores
     counts : (m,)   per-point weights
     """
+    if teacher_eval_points not in ("raw_points", "grid_centers"):
+        raise ValueError(
+            f"teacher_eval_points must be 'raw_points' or 'grid_centers', "
+            f"got {teacher_eval_points!r}"
+        )
+
+    # ── raw_points mode: all methods share the same n_raw query positions ──
+    if teacher_eval_points == "raw_points":
+        n   = X_T.shape[0]
+        idx = torch.randperm(n, device=X_T.device)[:min(n_raw, n)]
+        query_x = X_T[idx]
+
+        if method == "raw":
+            return query_x, H[idx], torch.ones(idx.shape[0], device=X_T.device)
+
+        if method == "binned":
+            return _binned_score_at_points(X_T, H, query_x, n_bins=n_bins)
+
+        if method == "nw":
+            sc = nw_teacher_2d(X_T, H, query_x)
+            return query_x, sc, torch.ones(idx.shape[0], device=X_T.device)
+
+        if method == "knn_nw":
+            sc = knn_nw_teacher_2d(
+                X_T, H, query_x, k=knn_k, bandwidth_scale=bandwidth_scale,
+            )
+            return query_x, sc, torch.ones(idx.shape[0], device=X_T.device)
+
+        raise ValueError(
+            f"Unknown teacher method {method!r}. "
+            f"Choose from 'raw', 'binned', 'nw', 'knn_nw'."
+        )
+
+    # ── grid_centers mode: existing behaviour ─────────────────────────────
     if method == "raw":
         n   = X_T.shape[0]
         idx = torch.randperm(n, device=X_T.device)[:min(n_raw, n)]
@@ -131,7 +231,7 @@ def apply_teacher_nl(
     if method == "binned":
         return bin_teacher_2d(X_T, H, n_bins=n_bins, min_count=min_count)
 
-    # NW and kNN-NW use the binned grid as query positions for consistency
+    # NW and kNN-NW use the binned grid as query positions
     if method in ("nw", "knn_nw"):
         pts, _, cc = bin_teacher_2d(X_T, H, n_bins=n_bins, min_count=min_count)
         if pts.shape[0] == 0:
@@ -202,6 +302,7 @@ def build_training_dataset_nl(
     min_count: int = 20,
     knn_k: int = 256,
     bandwidth_scale: float = 1.0,
+    teacher_eval_points: str = "raw_points",
 ) -> Optional[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Apply the teacher to each cached (T, X_T, H) and concatenate across time.
@@ -216,6 +317,7 @@ def build_training_dataset_nl(
             method, X_T, H,
             n_raw=n_raw, n_bins=n_bins, min_count=min_count,
             knn_k=knn_k, bandwidth_scale=bandwidth_scale,
+            teacher_eval_points=teacher_eval_points,
         )
         if pts.shape[0] == 0:
             continue
@@ -296,6 +398,7 @@ def run_experiment_nl(
     seed: int = 0,
     reverse_init: str = "stationary",
     mirafzali_mode: bool = True,
+    teacher_eval_points: str = "raw_points",
 ) -> dict:
     """
     Full pipeline for one (dataset, method) combination with the nonlinear SDE.
@@ -333,6 +436,7 @@ def run_experiment_nl(
     dataset_tuple = build_training_dataset_nl(
         sim_cache, method,
         n_raw=n_raw, n_bins=n_bins, min_count=min_count, knn_k=knn_k,
+        teacher_eval_points=teacher_eval_points,
     )
     if dataset_tuple is None:
         print("  ERROR: no valid teacher points found, aborting.", flush=True)
@@ -456,7 +560,8 @@ def run_phase_b(
     datasets: Sequence[str] = ("8gmm",),
     methods: Sequence[str] = ("raw", "binned", "nw", "knn_nw"),
     cfg: NonlinearSDEConfig = DEFAULT_NL_CFG,
-    outbase: str = "results/mirafzali_nonlinear",
+    outbase: str = "results/mirafzali_nonlinear_equal_points",
+    teacher_eval_points: str = "raw_points",
     **kwargs,
 ) -> dict:
     """
@@ -469,7 +574,11 @@ def run_phase_b(
     for ds in datasets:
         results.setdefault(ds, {})
         for method in methods:
-            m = run_experiment_nl(ds, method, cfg=cfg, outbase=outbase, **kwargs)
+            m = run_experiment_nl(
+                ds, method, cfg=cfg, outbase=outbase,
+                teacher_eval_points=teacher_eval_points,
+                **kwargs,
+            )
             results[ds][method] = m
 
     summary_path = Path(outbase) / "phase_b_summary.json"

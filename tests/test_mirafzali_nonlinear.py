@@ -38,6 +38,7 @@ from scoremodel_ext.malliavin.experiment_mirafzali_nonlinear import (
     compute_metrics_nl,
     DEFAULT_NL_CFG,
     _n_steps_for,
+    _binned_score_at_points,
 )
 from scoremodel_ext.malliavin.experiment_mirafzali import train_score_mlp
 
@@ -495,3 +496,125 @@ class TestComputeMetricsNL:
         x = sample_swissroll(1_000, device="cpu").numpy()
         m = compute_metrics_nl(x, nan_rate=0.0, dataset_name="swissroll", n_ref=200)
         assert "mode_coverage" not in m
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# teacher_eval_points="raw_points" — equal-count comparison
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestRawPointsMode:
+    """
+    Verify that all teacher methods return the same number of training points
+    when teacher_eval_points="raw_points", and that their outputs are finite.
+    """
+
+    @pytest.fixture(scope="class")
+    def xt_h(self):
+        X0, _ = sample_8gmm(2_000, device=DEVICE)
+        X_T, H = simulate_malliavin_nl(
+            X0, T=1.0, cfg=_MINI_CFG,
+            n_steps=_MINI_STEPS, gamma_reg=1e-3,
+        )
+        return X_T, H
+
+    def test_all_methods_same_point_count(self, xt_h):
+        """All methods with raw_points mode must return exactly n_raw points."""
+        X_T, H = xt_h
+        n_raw = 200
+        counts = {}
+        for method in ("raw", "binned", "nw", "knn_nw"):
+            pts, sc, cc = apply_teacher_nl(
+                method, X_T, H,
+                n_raw=n_raw, n_bins=15, min_count=2, knn_k=20,
+                teacher_eval_points="raw_points",
+            )
+            counts[method] = pts.shape[0]
+        # all methods share the same subsample
+        assert len(set(counts.values())) == 1, \
+            f"Expected uniform point count, got {counts}"
+        assert counts["raw"] <= n_raw
+
+    @pytest.mark.parametrize("method", ["raw", "binned", "nw", "knn_nw"])
+    def test_raw_points_no_nan(self, xt_h, method):
+        """Scores and positions must be finite in raw_points mode."""
+        X_T, H = xt_h
+        pts, sc, cc = apply_teacher_nl(
+            method, X_T, H,
+            n_raw=200, n_bins=15, min_count=2, knn_k=20,
+            teacher_eval_points="raw_points",
+        )
+        assert not torch.isnan(pts).any(), f"{method}: NaN in pts"
+        assert not torch.isnan(sc).any(),  f"{method}: NaN in sc"
+        assert torch.isfinite(sc).all(),   f"{method}: non-finite sc"
+
+    @pytest.mark.parametrize("method", ["raw", "binned", "nw", "knn_nw"])
+    def test_raw_points_uniform_weights(self, xt_h, method):
+        """Counts must be all-ones (uniform weights) in raw_points mode."""
+        X_T, H = xt_h
+        _, _, cc = apply_teacher_nl(
+            method, X_T, H,
+            n_raw=200, n_bins=15, min_count=2, knn_k=20,
+            teacher_eval_points="raw_points",
+        )
+        assert torch.allclose(cc, torch.ones_like(cc)), \
+            f"{method}: expected uniform weights"
+
+    def test_grid_centers_backward_compat(self, xt_h):
+        """grid_centers mode must still work and can return different counts."""
+        X_T, H = xt_h
+        # raw in grid_centers is identical to raw in raw_points
+        pts_raw_gc, sc_raw_gc, _ = apply_teacher_nl(
+            "raw", X_T, H,
+            n_raw=200, n_bins=15, min_count=2,
+            teacher_eval_points="grid_centers",
+        )
+        assert pts_raw_gc.shape[1] == 2
+        assert sc_raw_gc.shape == pts_raw_gc.shape
+
+        # binned grid_centers returns bin-centre positions (not raw X_T points)
+        pts_bin_gc, sc_bin, _ = apply_teacher_nl(
+            "binned", X_T, H,
+            n_raw=200, n_bins=15, min_count=2,
+            teacher_eval_points="grid_centers",
+        )
+        assert pts_bin_gc.shape[1] == 2
+
+    def test_invalid_teacher_eval_points_raises(self, xt_h):
+        X_T, H = xt_h
+        with pytest.raises(ValueError, match="teacher_eval_points"):
+            apply_teacher_nl("raw", X_T, H, teacher_eval_points="bad_mode")
+
+    def test_binned_score_at_points_shape(self, xt_h):
+        """_binned_score_at_points must return (query_x, sc, cc) with matching shapes."""
+        X_T, H = xt_h
+        query_x = X_T[:50]
+        out_pts, sc, cc = _binned_score_at_points(X_T, H, query_x, n_bins=15)
+        assert out_pts.shape == query_x.shape
+        assert sc.shape == query_x.shape
+        assert cc.shape == (50,)
+        assert torch.allclose(cc, torch.ones(50, device=X_T.device))
+
+    def test_binned_score_at_points_no_nan(self, xt_h):
+        X_T, H = xt_h
+        query_x = X_T[:100]
+        _, sc, _ = _binned_score_at_points(X_T, H, query_x, n_bins=15)
+        assert not torch.isnan(sc).any()
+        assert torch.isfinite(sc).all()
+
+    def test_raw_points_propagated_through_build(self, xt_h):
+        """build_training_dataset_nl respects teacher_eval_points for all methods."""
+        X_T, H = xt_h
+        cache = [(1.0, X_T, H)]
+        n_raw = 150
+        counts = {}
+        for method in ("raw", "binned", "nw", "knn_nw"):
+            result = build_training_dataset_nl(
+                cache, method,
+                n_raw=n_raw, n_bins=15, min_count=2, knn_k=20,
+                teacher_eval_points="raw_points",
+            )
+            assert result is not None, f"{method} returned None"
+            t, x, s, c = result
+            counts[method] = x.shape[0]
+        assert len(set(counts.values())) == 1, \
+            f"Expected equal counts across methods, got {counts}"
