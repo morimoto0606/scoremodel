@@ -1,0 +1,227 @@
+{
+  "baseline_raw": {
+    "config": {
+      "method": "raw"
+    },
+    "group": "baseline",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.002457386799235517,
+        "sliced_wasserstein": 0.13970526293342725,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.0021928627002989476,
+        "sliced_wasserstein": 0.14092693886840363,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.001116186484544368,
+        "sliced_wasserstein": 0.13755651744407046,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.0019221453280262775,
+    "mmd_rbf_std": 0.0007104016418685797,
+    "sliced_wasserstein_mean": 0.1393962397486338,
+    "sliced_wasserstein_std": 0.00170632840946751
+  },
+  "baseline_binned": {
+    "config": {
+      "method": "binned"
+    },
+    "group": "baseline",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.002251275317675938,
+        "sliced_wasserstein": 0.1407536919505731,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.0019231125409684413,
+        "sliced_wasserstein": 0.14439319459585767,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.002340082556628653,
+        "sliced_wasserstein": 0.14213528254084273,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.0021714901384243443,
+    "mmd_rbf_std": 0.00021963664223229252,
+    "sliced_wasserstein_mean": 0.14242738969575783,
+    "sliced_wasserstein_std": 0.0018372506140216102
+  },
+  "knn_k512_s0.50": {
+    "config": {
+      "family": "knn_nw",
+      "bandwidth": null,
+      "k": 512,
+      "bandwidth_scale": 0.5
+    },
+    "group": "sweep_top5",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.0023843109894096104,
+        "sliced_wasserstein": 0.14395665285271264,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.0018551061083189602,
+        "sliced_wasserstein": 0.14697243737734428,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.002093279516131308,
+        "sliced_wasserstein": 0.1427153094456672,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.002110898871286626,
+    "mmd_rbf_std": 0.0002650420396835363,
+    "sliced_wasserstein_mean": 0.14454813322524138,
+    "sliced_wasserstein_std": 0.002189331251771033
+  },
+  "nw_h0.08": {
+    "config": {
+      "family": "nw",
+      "bandwidth": 0.08,
+      "k": null,
+      "bandwidth_scale": 1.0
+    },
+    "group": "sweep_top5",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.002252969222675205,
+        "sliced_wasserstein": 0.1462603848808695,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.0020991908794117387,
+        "sliced_wasserstein": 0.14778270533366938,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.0026375666491106897,
+        "sliced_wasserstein": 0.14975859552945914,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.002329908917065878,
+    "mmd_rbf_std": 0.00027731192686112884,
+    "sliced_wasserstein_mean": 0.14793389524799935,
+    "sliced_wasserstein_std": 0.0017539992098409827
+  },
+  "knn_k64_s1.00": {
+    "config": {
+      "family": "knn_nw",
+      "bandwidth": null,
+      "k": 64,
+      "bandwidth_scale": 1.0
+    },
+    "group": "sweep_top5",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.002073444676746805,
+        "sliced_wasserstein": 0.14253729312826796,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.0017415686478376435,
+        "sliced_wasserstein": 0.14490335391260975,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.0020637621482998414,
+        "sliced_wasserstein": 0.14027016700601924,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.001959591824294763,
+    "mmd_rbf_std": 0.00018887566530292055,
+    "sliced_wasserstein_mean": 0.14257027134896563,
+    "sliced_wasserstein_std": 0.0023167694965470173
+  },
+  "knn_k256_s1.00": {
+    "config": {
+      "family": "knn_nw",
+      "bandwidth": null,
+      "k": 256,
+      "bandwidth_scale": 1.0
+    },
+    "group": "sweep_top5",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.0027379139982964262,
+        "sliced_wasserstein": 0.15080023156576033,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.0022110220381080237,
+        "sliced_wasserstein": 0.1479082212078907,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.0022378090447423005,
+        "sliced_wasserstein": 0.14611789343887885,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.0023955816937155836,
+    "mmd_rbf_std": 0.0002967708560503025,
+    "sliced_wasserstein_mean": 0.14827544873750997,
+    "sliced_wasserstein_std": 0.0023626710789897733
+  },
+  "knn_k128_s0.50": {
+    "config": {
+      "family": "knn_nw",
+      "bandwidth": null,
+      "k": 128,
+      "bandwidth_scale": 0.5
+    },
+    "group": "sweep_top5",
+    "per_seed": {
+      "0": {
+        "mmd_rbf": 0.002020629446282285,
+        "sliced_wasserstein": 0.1420242367137748,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "1": {
+        "mmd_rbf": 0.002003243355058082,
+        "sliced_wasserstein": 0.1441354116769695,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      },
+      "2": {
+        "mmd_rbf": 0.0025082458011074227,
+        "sliced_wasserstein": 0.145380502424021,
+        "mode_coverage_fraction": 1.0,
+        "nan_rate": 0.0
+      }
+    },
+    "mmd_rbf_mean": 0.0021773728674825965,
+    "mmd_rbf_std": 0.0002866761983425517,
+    "sliced_wasserstein_mean": 0.1438467169382551,
+    "sliced_wasserstein_std": 0.0016966550529098935
+  }
+}

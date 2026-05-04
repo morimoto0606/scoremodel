@@ -1,0 +1,25 @@
+\begin{table}[ht]
+  \centering
+  \caption{Nonlinear SDE — teacher comparison}
+  \label{tab:nl_teacher_compare}
+  \begin{tabular}{lllllll}
+    \toprule
+    Dataset & Method & MMD $\downarrow$ & SW $\downarrow$ & NaN rate $\downarrow$ & Cov.\,frac. & Mean dist. \\
+    \midrule
+    8gmm & raw & \textbf{0.00075} & \textbf{1.26603} & \textbf{0.00000} & \textbf{1.00000} & \textbf{0.23256} \\
+    8gmm & binned & 0.00084 & 1.28837 & 0.00000 & 1.00000 & 0.24016 \\
+    8gmm & nw & 0.00162 & 1.29766 & 0.00000 & 1.00000 & 0.34373 \\
+    8gmm & knn_nw & 0.01465 & 2.95011 & 0.00000 & 1.00000 & 2.83634 \\
+    \midrule
+    checkerboard & raw & 0.00368 & \textbf{0.98356} & \textbf{0.00000} & -- & -- \\
+    checkerboard & binned & \textbf{0.00157} & 1.02772 & 0.00000 & -- & -- \\
+    checkerboard & nw & 0.00266 & 1.02760 & 0.00000 & -- & -- \\
+    checkerboard & knn_nw & 0.01486 & 3.64105 & 0.00000 & -- & -- \\
+    \midrule
+    swissroll & raw & 0.00159 & 1.69405 & \textbf{0.00000} & -- & -- \\
+    swissroll & binned & \textbf{0.00046} & \textbf{1.68609} & 0.00000 & -- & -- \\
+    swissroll & nw & 0.00140 & 1.74201 & 0.00000 & -- & -- \\
+    swissroll & knn_nw & 0.01008 & 2.61133 & 0.00000 & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}

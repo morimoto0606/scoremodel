@@ -1,0 +1,15 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": 0.004400879144668579,
+  "sliced_wasserstein": 1.3306102894558756,
+  "mode_coverage": {
+    "n_covered": 8,
+    "n_modes": 8,
+    "coverage_fraction": 1.0,
+    "min_proportion": 0.0895,
+    "max_proportion": 0.15465,
+    "mean_nearest_dist": 0.35537660121917725
+  },
+  "reverse_init": "stationary"
+}

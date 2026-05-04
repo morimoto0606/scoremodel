@@ -1,0 +1,124 @@
+{
+  "8gmm": {
+    "raw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0007450282573699951,
+      "sliced_wasserstein": 1.266025531813675,
+      "mode_coverage": {
+        "n_covered": 8,
+        "n_modes": 8,
+        "coverage_fraction": 1.0,
+        "min_proportion": 0.11745,
+        "max_proportion": 0.1398,
+        "mean_nearest_dist": 0.23255786299705505
+      },
+      "reverse_init": "stationary"
+    },
+    "binned": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0008390247821807861,
+      "sliced_wasserstein": 1.2883690580724172,
+      "mode_coverage": {
+        "n_covered": 8,
+        "n_modes": 8,
+        "coverage_fraction": 1.0,
+        "min_proportion": 0.1126,
+        "max_proportion": 0.13805,
+        "mean_nearest_dist": 0.24016313254833221
+      },
+      "reverse_init": "stationary"
+    },
+    "nw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.001619189977645874,
+      "sliced_wasserstein": 1.297657948111473,
+      "mode_coverage": {
+        "n_covered": 8,
+        "n_modes": 8,
+        "coverage_fraction": 1.0,
+        "min_proportion": 0.11935,
+        "max_proportion": 0.13125,
+        "mean_nearest_dist": 0.3437274396419525
+      },
+      "reverse_init": "stationary"
+    },
+    "knn_nw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.014650195837020874,
+      "sliced_wasserstein": 2.9501067280724156,
+      "mode_coverage": {
+        "n_covered": 8,
+        "n_modes": 8,
+        "coverage_fraction": 1.0,
+        "min_proportion": 0.10215,
+        "max_proportion": 0.1438,
+        "mean_nearest_dist": 2.8363420963287354
+      },
+      "reverse_init": "stationary"
+    }
+  },
+  "checkerboard": {
+    "raw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0036777853965759277,
+      "sliced_wasserstein": 0.9835562115458759,
+      "reverse_init": "stationary"
+    },
+    "binned": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.001570373773574829,
+      "sliced_wasserstein": 1.0277160197177941,
+      "reverse_init": "stationary"
+    },
+    "nw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.002656012773513794,
+      "sliced_wasserstein": 1.0276025591397178,
+      "reverse_init": "stationary"
+    },
+    "knn_nw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.014862209558486938,
+      "sliced_wasserstein": 3.641052326125541,
+      "reverse_init": "stationary"
+    }
+  },
+  "swissroll": {
+    "raw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0015880465507507324,
+      "sliced_wasserstein": 1.6940482195222943,
+      "reverse_init": "stationary"
+    },
+    "binned": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.00046196579933166504,
+      "sliced_wasserstein": 1.6860940103724489,
+      "reverse_init": "stationary"
+    },
+    "nw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0013956725597381592,
+      "sliced_wasserstein": 1.742007476994616,
+      "reverse_init": "stationary"
+    },
+    "knn_nw": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.010081812739372253,
+      "sliced_wasserstein": 2.6113320502730892,
+      "reverse_init": "stationary"
+    }
+  }
+}

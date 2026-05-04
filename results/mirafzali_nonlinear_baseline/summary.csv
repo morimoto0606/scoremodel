@@ -1,0 +1,2 @@
+dataset,method,mmd,sliced_wasserstein,nan_rate,coverage_fraction,mean_nearest_dist
+swissroll,mirafzali,6.753206253051758e-05*,1.7193066546282492*,0.0*,,
