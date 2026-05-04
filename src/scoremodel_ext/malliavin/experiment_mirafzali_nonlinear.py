@@ -295,12 +295,20 @@ def run_experiment_nl(
     device: Optional[str] = None,
     seed: int = 0,
     reverse_init: str = "stationary",
+    mirafzali_mode: bool = True,
 ) -> dict:
     """
     Full pipeline for one (dataset, method) combination with the nonlinear SDE.
 
     Returns metrics dict.
     """
+    if mirafzali_mode:
+        n_paths = 25_000
+        n_epochs = 2500
+        batch_size = 2048
+        lr = 3e-4
+        n_steps_rev = 250
+
     torch.manual_seed(seed)
     np.random.seed(seed)
     if device is None:
@@ -374,7 +382,7 @@ def run_experiment_nl(
     # The old "forward_terminal" option is a reconstruction / consistency test:
     #   X0 ~ data -> forward -> X_T -> reverse -> X0.
     sampler = get_sampler(dataset)
-    n_steps_rev = _n_steps_for(cfg.T, n_steps_per_unit)
+    n_steps_rev = 250
 
     if reverse_init == "stationary":
         X_T_start = sample_stationary_nl(
