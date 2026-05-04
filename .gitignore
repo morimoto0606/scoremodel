@@ -28,3 +28,9 @@ dist/
 # ==== Temporary ====
 tmp/
 cache/
+
+# ==== experiment outputs ====
+results/
+*.pt
+*.pth
+*.ckpt

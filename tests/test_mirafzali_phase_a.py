@@ -34,6 +34,7 @@ from scoremodel_ext.malliavin.datasets_2d import (
     sample_8gmm,
     sample_checkerboard,
     sample_swissroll,
+    sample_single_swissroll,
     get_sampler,
 )
 from scoremodel_ext.malliavin.sde_linear import (
@@ -85,10 +86,36 @@ class TestDatasets:
         x = sample_swissroll(1_000, device="cpu")
         assert not torch.isnan(x).any()
 
+    def test_swissroll_5rolls_spread(self):
+        """5-roll mixture should be spread across multiple quadrants."""
+        x = sample_swissroll(5_000, device="cpu")
+        # With 5 spirals on a pentagon of radius 2.5, samples reach out
+        # from the origin — mean distance from origin should be notable.
+        r = x.norm(dim=1)
+        assert r.mean().item() > 0.5, "Expected samples spread away from origin"
+
+    @pytest.mark.parametrize("n", [1, 100, 500])
+    def test_single_swissroll_shape(self, n):
+        x = sample_single_swissroll(n, device=DEVICE)
+        assert x.shape == (n, 2)
+
+    def test_single_swissroll_no_nan(self):
+        x = sample_single_swissroll(1_000, device="cpu")
+        assert not torch.isnan(x).any()
+
     def test_get_sampler_returns_callable(self):
-        for name in ("8gmm", "checkerboard", "swissroll"):
+        for name in ("8gmm", "checkerboard", "swissroll", "single_swissroll"):
             fn = get_sampler(name)
             assert callable(fn)
+
+    def test_get_sampler_swissroll_is_5roll(self):
+        """get_sampler('swissroll') must return the 5-roll version."""
+        from scoremodel_ext.malliavin.datasets_2d import sample_swissroll as ref
+        assert get_sampler("swissroll") is ref
+
+    def test_get_sampler_single_swissroll(self):
+        from scoremodel_ext.malliavin.datasets_2d import sample_single_swissroll as ref
+        assert get_sampler("single_swissroll") is ref
 
     def test_get_sampler_unknown_raises(self):
         with pytest.raises(ValueError):

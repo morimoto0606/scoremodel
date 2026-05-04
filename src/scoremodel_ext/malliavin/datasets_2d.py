@@ -6,6 +6,7 @@ Datasets
 - 8-GMM        (re-exported from sde_2d for convenience)
 - Checkerboard
 - Swiss Roll (2D spiral)
+- Single Swiss Roll (legacy single-spiral; kept for backward compatibility)
 """
 
 import math
@@ -69,9 +70,9 @@ def sample_checkerboard(n: int, half_width: float = 2.0, n_cells: int = 4,
 # Swiss Roll (2D spiral)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def sample_swissroll(n: int, noise: float = 0.05, device: str = "cpu"):
+def sample_single_swissroll(n: int, noise: float = 0.05, device: str = "cpu"):
     """
-    2D Swiss Roll — a planar spiral.
+    Single 2D Swiss Roll — a planar spiral (legacy implementation).
 
     t ~ Uniform[3π/2, 15π/2]
     (x, y) = t * (cos t, sin t)  then normalised so the bounding box
@@ -100,14 +101,85 @@ def sample_swissroll(n: int, noise: float = 0.05, device: str = "cpu"):
     return torch.stack([x, y], dim=1)
 
 
+# 5-component Swiss Roll mixture (Mirafzali et al. Figure 1/2)
+# Centers arranged on a regular pentagon of radius _SR_RADIUS.
+# Each component is a small 2-D spiral scaled to _SR_ARM_SCALE,
+# with additive noise _SR_NOISE.
+
+_SR_N_ROLLS    = 5
+_SR_RADIUS     = 2.5          # distance of each spiral centre from origin
+_SR_ARM_SCALE  = 0.45         # half-width of each individual spiral arm
+_SR_T_MIN      = 1.5 * math.pi
+_SR_T_MAX      = 4.5 * math.pi  # shorter arms than the single roll
+_SR_NOISE      = 0.04
+
+
+def sample_swissroll(n: int, noise: float = _SR_NOISE, device: str = "cpu"):
+    """
+    5-component Swiss Roll mixture, following Mirafzali et al. Figure 1/2.
+
+    Five small 2-D spirals are placed at the vertices of a regular pentagon
+    of radius ``_SR_RADIUS``.  Each spiral is uniformly sampled along its
+    arc and independently rotated to reduce visual overlap.
+
+    Parameters
+    ----------
+    n     : total number of samples (divided equally across rolls)
+    noise : additive Gaussian std (in normalised spiral coordinates)
+    device : torch device string
+
+    Returns
+    -------
+    x : (n, 2) samples on the 5-roll distribution
+    """
+    angles_center = [2 * math.pi * k / _SR_N_ROLLS for k in range(_SR_N_ROLLS)]
+    # Independent rotation of each spiral arm so they don't align
+    rot_offsets   = [2 * math.pi * k / _SR_N_ROLLS for k in range(_SR_N_ROLLS)]
+
+    # Distribute n as evenly as possible across rolls
+    base, rem = divmod(n, _SR_N_ROLLS)
+    counts = [base + (1 if k < rem else 0) for k in range(_SR_N_ROLLS)]
+
+    parts = []
+    for k in range(_SR_N_ROLLS):
+        nk = counts[k]
+        if nk == 0:
+            continue
+
+        # Centre of this spiral
+        cx = _SR_RADIUS * math.cos(angles_center[k])
+        cy = _SR_RADIUS * math.sin(angles_center[k])
+
+        # Sample arc parameter
+        t = _SR_T_MIN + (_SR_T_MAX - _SR_T_MIN) * torch.rand(nk, device=device)
+
+        # Local spiral (normalised to ≈ [−1, 1])
+        scale = _SR_T_MAX * 0.5
+        lx = t * torch.cos(t + rot_offsets[k]) / scale
+        ly = t * torch.sin(t + rot_offsets[k]) / scale
+
+        # Scale to arm width and translate to centre
+        px = cx + _SR_ARM_SCALE * lx
+        py = cy + _SR_ARM_SCALE * ly
+
+        if noise > 0:
+            px = px + noise * torch.randn(nk, device=device)
+            py = py + noise * torch.randn(nk, device=device)
+
+        parts.append(torch.stack([px, py], dim=1))
+
+    return torch.cat(parts, dim=0)
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Registry
 # ──────────────────────────────────────────────────────────────────────────────
 
 _SAMPLERS = {
-    "8gmm":        sample_8gmm,
-    "checkerboard": sample_checkerboard,
-    "swissroll":   sample_swissroll,
+    "8gmm":           sample_8gmm,
+    "checkerboard":   sample_checkerboard,
+    "swissroll":      sample_swissroll,
+    "single_swissroll": sample_single_swissroll,
 }
 
 

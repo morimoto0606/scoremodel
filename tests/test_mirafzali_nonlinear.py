@@ -36,11 +36,17 @@ from scoremodel_ext.malliavin.experiment_mirafzali_nonlinear import (
     simulate_all_times_nl,
     build_training_dataset_nl,
     compute_metrics_nl,
+    build_results_table,
     DEFAULT_NL_CFG,
     _n_steps_for,
     _binned_score_at_points,
 )
 from scoremodel_ext.malliavin.experiment_mirafzali import train_score_mlp
+from scoremodel_ext.malliavin.models import (
+    MirafzaliSkorokhodNet,
+    NormalizedSkorokhodModel,
+    train_mirafzali_skorokhod_net,
+)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -618,3 +624,372 @@ class TestRawPointsMode:
             counts[method] = x.shape[0]
         assert len(set(counts.values())) == 1, \
             f"Expected equal counts across methods, got {counts}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# build_results_table
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Synthetic results dict used across all table tests
+_FAKE_RESULTS = {
+    "8gmm": {
+        "raw":    {"mmd_rbf": 0.050, "sliced_wasserstein": 0.040, "nan_rate": 0.00,
+                   "mode_coverage": {"coverage_fraction": 0.875, "mean_nearest_dist": 0.12}},
+        "binned": {"mmd_rbf": 0.030, "sliced_wasserstein": 0.025, "nan_rate": 0.01,
+                   "mode_coverage": {"coverage_fraction": 1.000, "mean_nearest_dist": 0.08}},
+        "nw":     {"mmd_rbf": 0.020, "sliced_wasserstein": 0.018, "nan_rate": 0.00,
+                   "mode_coverage": {"coverage_fraction": 1.000, "mean_nearest_dist": 0.07}},
+        "knn_nw": {"mmd_rbf": 0.015, "sliced_wasserstein": 0.012, "nan_rate": 0.00,
+                   "mode_coverage": {"coverage_fraction": 1.000, "mean_nearest_dist": 0.06}},
+    },
+    "swissroll": {
+        "raw":    {"mmd_rbf": 0.080, "sliced_wasserstein": 0.070, "nan_rate": 0.02},
+        "binned": {"mmd_rbf": 0.060, "sliced_wasserstein": 0.050, "nan_rate": 0.00},
+        "nw":     {"mmd_rbf": 0.045, "sliced_wasserstein": 0.038, "nan_rate": 0.00},
+        "knn_nw": {"mmd_rbf": 0.040, "sliced_wasserstein": 0.032, "nan_rate": 0.00},
+    },
+}
+
+
+class TestBuildResultsTable:
+    @pytest.fixture(scope="class")
+    def df(self):
+        return build_results_table(_FAKE_RESULTS)
+
+    # ── shape & schema ──────────────────────────────────────────────────────
+    def test_column_names(self, df):
+        expected = {"dataset", "method", "mmd", "sliced_wasserstein",
+                    "nan_rate", "coverage_fraction", "mean_nearest_dist"}
+        assert expected == set(df.columns)
+
+    def test_row_count(self, df):
+        # 2 datasets × 4 methods = 8 rows
+        assert len(df) == 8
+
+    def test_method_order_preserved(self, df):
+        methods_8gmm = df[df["dataset"] == "8gmm"]["method"].tolist()
+        assert methods_8gmm == ["raw", "binned", "nw", "knn_nw"]
+
+    def test_each_dataset_has_four_methods(self, df):
+        for ds in ("8gmm", "swissroll"):
+            assert len(df[df["dataset"] == ds]) == 4
+
+    # ── best-value marking ──────────────────────────────────────────────────
+    def test_best_mmd_marked_in_8gmm(self, df):
+        """knn_nw has the smallest mmd (0.015) in 8gmm → must end with *."""
+        row = df[(df["dataset"] == "8gmm") & (df["method"] == "knn_nw")].iloc[0]
+        assert str(row["mmd"]).endswith("*"), \
+            f"Expected best MMD marked, got {row['mmd']!r}"
+
+    def test_non_best_mmd_not_marked(self, df):
+        row = df[(df["dataset"] == "8gmm") & (df["method"] == "raw")].iloc[0]
+        assert not str(row["mmd"]).endswith("*"), \
+            f"Non-best row should not be marked, got {row['mmd']!r}"
+
+    def test_best_sw_marked_in_8gmm(self, df):
+        row = df[(df["dataset"] == "8gmm") & (df["method"] == "knn_nw")].iloc[0]
+        assert str(row["sliced_wasserstein"]).endswith("*")
+
+    def test_best_marked_per_dataset(self, df):
+        """Each dataset must have exactly one '*' per metric column."""
+        for ds in ("8gmm", "swissroll"):
+            grp = df[df["dataset"] == ds]
+            for col in ("mmd", "sliced_wasserstein", "nan_rate"):
+                stars = grp[col].astype(str).str.endswith("*").sum()
+                assert stars == 1, \
+                    f"dataset={ds} col={col}: expected 1 star, got {stars}"
+
+    # ── 8GMM-only columns ───────────────────────────────────────────────────
+    def test_gmm_cols_present_for_8gmm(self, df):
+        gmm = df[df["dataset"] == "8gmm"]
+        assert gmm["coverage_fraction"].notna().all()
+        assert gmm["mean_nearest_dist"].notna().all()
+
+    def test_gmm_cols_absent_for_swissroll(self, df):
+        sr = df[df["dataset"] == "swissroll"]
+        assert sr["coverage_fraction"].isna().all()
+        assert sr["mean_nearest_dist"].isna().all()
+
+    # ── error rows skipped ──────────────────────────────────────────────────
+    def test_error_rows_excluded(self):
+        results_with_error = {
+            "8gmm": {
+                "raw":    {"error": "no_valid_teacher_points"},
+                "binned": {"mmd_rbf": 0.03, "sliced_wasserstein": 0.02, "nan_rate": 0.0},
+                "nw":     {"mmd_rbf": 0.02, "sliced_wasserstein": 0.01, "nan_rate": 0.0},
+                "knn_nw": {"mmd_rbf": 0.01, "sliced_wasserstein": 0.01, "nan_rate": 0.0},
+            }
+        }
+        df = build_results_table(results_with_error)
+        assert len(df) == 3
+        assert "raw" not in df["method"].tolist()
+
+    def test_empty_results_returns_empty_df(self):
+        df = build_results_table({})
+        assert len(df) == 0
+
+    # ── CSV / LaTeX output ──────────────────────────────────────────────────
+    def test_csv_saved(self, df, tmp_path):
+        build_results_table(_FAKE_RESULTS, outbase=str(tmp_path))
+        csv = tmp_path / "summary.csv"
+        assert csv.exists(), "summary.csv not created"
+        import csv as csv_mod
+        with open(csv) as f:
+            reader = csv_mod.DictReader(f)
+            rows = list(reader)
+        assert len(rows) == 8
+        assert "mmd" in rows[0]
+
+    def test_tex_saved(self, df, tmp_path):
+        build_results_table(_FAKE_RESULTS, outbase=str(tmp_path))
+        tex = tmp_path / "summary.tex"
+        assert tex.exists(), "summary.tex not created"
+        content = tex.read_text()
+        assert "\\begin{table}" in content
+        assert "\\toprule" in content
+        assert "\\textbf{" in content, "best values should be bold in LaTeX"
+
+    def test_tex_has_midrule_between_datasets(self, tmp_path):
+        build_results_table(_FAKE_RESULTS, outbase=str(tmp_path))
+        content = (tmp_path / "summary.tex").read_text()
+        # Two datasets → at least one \\midrule separator between blocks
+        assert content.count("\\midrule") >= 2  # header + dataset separator
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# method="mirafzali" — Algorithm 6/7 faithful reproduction
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestMirafzaliMethod:
+    """
+    Verify that method='mirafzali' (Algorithm 6) uses ALL paths with equal
+    weights, unlike 'raw' which subsamples to n_raw.
+    """
+
+    @pytest.fixture(scope="class")
+    def xt_h(self):
+        X0, _ = sample_8gmm(2_000, device=DEVICE)
+        X_T, H = simulate_malliavin_nl(
+            X0, T=1.0, cfg=_MINI_CFG,
+            n_steps=_MINI_STEPS, gamma_reg=1e-3,
+        )
+        return X_T, H
+
+    def test_uses_all_paths(self, xt_h):
+        """mirafzali must return ALL n_paths points — no subsampling."""
+        X_T, H = xt_h
+        pts, sc, cc = apply_teacher_nl("mirafzali", X_T, H, n_raw=200)
+        assert pts.shape[0] == X_T.shape[0], (
+            f"Expected {X_T.shape[0]} points (all paths), got {pts.shape[0]}"
+        )
+
+    def test_scores_equal_h(self, xt_h):
+        """mirafzali score == H (raw Malliavin weights, no smoothing)."""
+        X_T, H = xt_h
+        pts, sc, cc = apply_teacher_nl("mirafzali", X_T, H)
+        assert torch.allclose(sc, H), "mirafzali scores should equal H exactly"
+
+    def test_uniform_weights(self, xt_h):
+        """mirafzali must use equal (all-ones) weights."""
+        X_T, H = xt_h
+        _, _, cc = apply_teacher_nl("mirafzali", X_T, H)
+        assert torch.allclose(cc, torch.ones_like(cc)), \
+            "mirafzali weights should all be 1.0"
+
+    def test_no_nan(self, xt_h):
+        X_T, H = xt_h
+        pts, sc, cc = apply_teacher_nl("mirafzali", X_T, H)
+        assert not torch.isnan(pts).any(), "NaN in pts"
+        assert not torch.isnan(sc).any(),  "NaN in sc"
+        assert torch.isfinite(sc).all(),   "non-finite sc"
+
+    def test_more_points_than_raw(self, xt_h):
+        """mirafzali uses strictly more training points than raw (which subsamples)."""
+        X_T, H = xt_h
+        n_raw = 200
+        pts_m, _, _ = apply_teacher_nl("mirafzali", X_T, H, n_raw=n_raw)
+        pts_r, _, _ = apply_teacher_nl("raw",       X_T, H, n_raw=n_raw)
+        assert pts_m.shape[0] > pts_r.shape[0], (
+            f"mirafzali ({pts_m.shape[0]}) should have more points than "
+            f"raw with n_raw={n_raw} ({pts_r.shape[0]})"
+        )
+
+    def test_same_in_both_teacher_eval_modes(self, xt_h):
+        """mirafzali behaves identically for raw_points and grid_centers."""
+        X_T, H = xt_h
+        pts_rp, sc_rp, cc_rp = apply_teacher_nl(
+            "mirafzali", X_T, H, teacher_eval_points="raw_points",
+        )
+        pts_gc, sc_gc, cc_gc = apply_teacher_nl(
+            "mirafzali", X_T, H, teacher_eval_points="grid_centers",
+        )
+        assert pts_rp.shape == pts_gc.shape
+        assert torch.allclose(pts_rp, pts_gc)
+        assert torch.allclose(sc_rp, sc_gc)
+        assert torch.allclose(cc_rp, cc_gc)
+
+    def test_build_dataset_mirafzali_all_paths(self):
+        """build_training_dataset_nl with mirafzali includes all paths per time."""
+        times = [0.30, 0.80]
+        n_paths = 500
+        cache = []
+        for T in times:
+            X0_, _ = sample_8gmm(n_paths, device=DEVICE)
+            X_T, H = simulate_malliavin_nl(
+                X0_, T=T, cfg=_MINI_CFG,
+                n_steps=_MINI_STEPS, gamma_reg=1e-3,
+            )
+            cache.append((T, X_T, H))
+
+        result = build_training_dataset_nl(cache, "mirafzali")
+        assert result is not None
+        t, x, s, c = result
+        # All n_paths × n_times rows (no subsampling)
+        assert x.shape[0] == n_paths * len(times), (
+            f"Expected {n_paths * len(times)} rows, got {x.shape[0]}"
+        )
+        assert torch.allclose(c, torch.ones_like(c)), \
+            "mirafzali dataset weights should all be 1.0"
+
+    def test_build_results_table_includes_mirafzali(self):
+        """build_results_table correctly handles mirafzali method entries."""
+        results = {
+            "swissroll": {
+                "raw":       {"mmd_rbf": 0.08, "sliced_wasserstein": 0.07, "nan_rate": 0.02},
+                "mirafzali": {"mmd_rbf": 0.05, "sliced_wasserstein": 0.04, "nan_rate": 0.00},
+            }
+        }
+        df = build_results_table(results)
+        assert "mirafzali" in df["method"].tolist(), \
+            "mirafzali should appear in results table"
+        assert len(df) == 2  # raw + mirafzali
+        # mirafzali has lower mmd → should be marked best
+        row = df[df["method"] == "mirafzali"].iloc[0]
+        assert str(row["mmd"]).endswith("*"), \
+            f"mirafzali has best mmd but was not marked: {row['mmd']!r}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MirafzaliSkorokhodNet architecture
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestMirafzaliSkorokhodNet:
+    def test_output_shape(self):
+        net = MirafzaliSkorokhodNet(x_dim=2, hidden=64, n_blocks=2, num_frequencies=8)
+        t = torch.linspace(0.1, 1.0, 20)
+        x = torch.randn(20, 2)
+        out = net(t, x)
+        assert out.shape == (20, 2)
+
+    def test_t_2d_input(self):
+        """Accept t as (N,1) as well as (N,)."""
+        net = MirafzaliSkorokhodNet(x_dim=2, hidden=64, n_blocks=2, num_frequencies=8)
+        t = torch.linspace(0.1, 1.0, 10).unsqueeze(1)  # (10, 1)
+        x = torch.randn(10, 2)
+        out = net(t, x)
+        assert out.shape == (10, 2)
+
+    def test_no_nan_random_input(self):
+        net = MirafzaliSkorokhodNet(x_dim=2, hidden=64, n_blocks=2, num_frequencies=8)
+        t = torch.rand(50)
+        x = torch.randn(50, 2)
+        out = net(t, x)
+        assert not torch.isnan(out).any()
+        assert torch.isfinite(out).all()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# train_mirafzali_skorokhod_net — smoke test (hidden=1024, n_blocks=4)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestTrainMirafzaliSkorokhodNet:
+    """Smoke tests: small epochs so the suite stays fast."""
+
+    @pytest.fixture(scope="class")
+    def small_data(self):
+        """Tiny (t, x, delta) dataset from a real Malliavin simulation."""
+        X0, _ = sample_8gmm(600, device=DEVICE)
+        X_T, H = simulate_malliavin_nl(
+            X0, T=1.0, cfg=_MINI_CFG,
+            n_steps=_MINI_STEPS, gamma_reg=1e-3,
+        )
+        # two time steps stacked
+        t = torch.cat([torch.full((600,), 0.5), torch.full((600,), 1.0)]).to(DEVICE)
+        x = torch.cat([X_T, X_T]).to(DEVICE)
+        delta = torch.cat([H, H]).to(DEVICE)
+        return t, x, delta
+
+    def test_returns_normalized_model(self, small_data):
+        t, x, delta = small_data
+        model = train_mirafzali_skorokhod_net(
+            t, x, delta,
+            n_epochs=10, batch_size=64,
+            hidden=64, n_blocks=2, num_frequencies=8,
+            device=DEVICE,
+        )
+        assert isinstance(model, NormalizedSkorokhodModel)
+        assert isinstance(model.net, MirafzaliSkorokhodNet)
+
+    def test_output_shape(self, small_data):
+        t, x, delta = small_data
+        model = train_mirafzali_skorokhod_net(
+            t, x, delta,
+            n_epochs=10, batch_size=64,
+            hidden=64, n_blocks=2, num_frequencies=8,
+            device=DEVICE,
+        )
+        n = 30
+        tq = torch.rand(n, device=DEVICE)
+        xq = torch.randn(n, 2, device=DEVICE)
+        with torch.no_grad():
+            out = model(tq, xq)
+        assert out.shape == (n, 2)
+        assert torch.isfinite(out).all()
+
+    def test_hidden1024_n_blocks4_smoke(self, small_data):
+        """Requested smoke-test: hidden=1024, n_blocks=4."""
+        t, x, delta = small_data
+        model = train_mirafzali_skorokhod_net(
+            t, x, delta,
+            n_epochs=10, batch_size=64,
+            hidden=1024, n_blocks=4, num_frequencies=16,
+            device=DEVICE,
+        )
+        assert isinstance(model, NormalizedSkorokhodModel)
+        tq = torch.rand(16, device=DEVICE)
+        xq = torch.randn(16, 2, device=DEVICE)
+        with torch.no_grad():
+            out = model(tq, xq)
+        assert out.shape == (16, 2)
+        assert not torch.isnan(out).any()
+
+    def test_normalisation_buffers_registered(self, small_data):
+        """NormalizedSkorokhodModel must have all stat buffers on the right device."""
+        t, x, delta = small_data
+        model = train_mirafzali_skorokhod_net(
+            t, x, delta,
+            n_epochs=5, batch_size=32,
+            hidden=32, n_blocks=1, num_frequencies=4,
+            device=DEVICE,
+        )
+        for name in ("x_mean", "x_std", "t_mean", "t_std", "y_mean", "y_std"):
+            buf = getattr(model, name)
+            assert buf is not None, f"Missing buffer: {name}"
+            assert torch.isfinite(buf).all(), f"Non-finite buffer: {name}"
+
+    def test_plain_mse_no_weighting(self, small_data):
+        """
+        train_mirafzali_skorokhod_net does NOT use per-point weights.
+        Passing a c vector must not change the model that's returned.
+        (Verify by checking the training reaches completion for any c.)
+        """
+        t, x, delta = small_data
+        # just confirm it trains without error when ignoring c
+        model = train_mirafzali_skorokhod_net(
+            t, x, delta,
+            n_epochs=5, batch_size=32,
+            hidden=32, n_blocks=1, num_frequencies=4,
+            device=DEVICE,
+        )
+        assert isinstance(model, NormalizedSkorokhodModel)
+
