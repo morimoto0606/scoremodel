@@ -1,0 +1,91 @@
+{
+  "mirafzali": {
+    "0": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 6.753206253051758e-05,
+      "sliced_wasserstein": 1.7193066546282492,
+      "reverse_init": "stationary"
+    },
+    "1": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.00021907687187194824,
+      "sliced_wasserstein": 1.7410339379471906,
+      "reverse_init": "stationary"
+    },
+    "2": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.004701524972915649,
+      "sliced_wasserstein": 1.6796473619686687,
+      "reverse_init": "stationary"
+    },
+    "3": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0006245672702789307,
+      "sliced_wasserstein": 1.7029198528214855,
+      "reverse_init": "stationary"
+    },
+    "4": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0017976164817810059,
+      "sliced_wasserstein": 1.6759234896753394,
+      "reverse_init": "stationary"
+    }
+  },
+  "mirafzali_residual_binned": {
+    "0": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 9.98377799987793e-06,
+      "sliced_wasserstein": 1.7188128351410397,
+      "reverse_init": "stationary",
+      "var_H": 2.9847326278686523,
+      "var_residual": 1.6416393518447876,
+      "mean_residual_norm": 1.232181191444397
+    },
+    "1": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.00033742189407348633,
+      "sliced_wasserstein": 1.7445460710194078,
+      "reverse_init": "stationary",
+      "var_H": 2.9689364433288574,
+      "var_residual": 1.6393208503723145,
+      "mean_residual_norm": 1.2315725088119507
+    },
+    "2": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.003382265567779541,
+      "sliced_wasserstein": 1.6824218454344482,
+      "reverse_init": "stationary",
+      "var_H": 2.97749662399292,
+      "var_residual": 1.6466823816299438,
+      "mean_residual_norm": 1.2319663763046265
+    },
+    "3": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.0008483231067657471,
+      "sliced_wasserstein": 1.705376067027546,
+      "reverse_init": "stationary",
+      "var_H": 2.9799623489379883,
+      "var_residual": 1.6744189262390137,
+      "mean_residual_norm": 1.244762659072876
+    },
+    "4": {
+      "nan_rate": 0.0,
+      "n_samples": 20000,
+      "mmd_rbf": 0.00025004148483276367,
+      "sliced_wasserstein": 1.707578829621399,
+      "reverse_init": "stationary",
+      "var_H": 2.9670767784118652,
+      "var_residual": 1.6484674215316772,
+      "mean_residual_norm": 1.2364287376403809
+    }
+  }
+}

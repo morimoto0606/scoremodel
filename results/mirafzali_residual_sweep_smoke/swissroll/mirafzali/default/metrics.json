@@ -1,0 +1,8 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": 0.0012674927711486816,
+  "sliced_wasserstein": 1.7081458369929567,
+  "method": "mirafzali",
+  "config_key": "mirafzali/default"
+}

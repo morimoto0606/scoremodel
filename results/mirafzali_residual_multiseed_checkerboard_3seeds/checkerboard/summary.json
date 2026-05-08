@@ -1,0 +1,46 @@
+[
+  {
+    "config_key": "baseline",
+    "method": "mirafzali",
+    "n_seeds": 3,
+    "mmd_mean": 0.0019165873527526855,
+    "mmd_std": 0.0004225733211795984,
+    "sw_mean": 1.01504920537217,
+    "sw_std": 0.017115134718268636,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 205.74666666666667
+  },
+  {
+    "config_key": "residual_nw__a1.0_bw1.0",
+    "method": "mirafzali_residual_nw",
+    "n_seeds": 3,
+    "mmd_mean": 0.0012699564297993977,
+    "mmd_std": 0.00017468090298167096,
+    "sw_mean": 1.0150844848393965,
+    "sw_std": 0.019009268941196426,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 213.83333333333334
+  },
+  {
+    "config_key": "residual_knn_nw__a1.0_k128_bw0.5",
+    "method": "mirafzali_residual_knn_nw",
+    "n_seeds": 3,
+    "mmd_mean": 0.0012299617131551106,
+    "mmd_std": 0.00032302152173293284,
+    "sw_mean": 1.0140478388037593,
+    "sw_std": 0.01734168044769017,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 217.46
+  },
+  {
+    "config_key": "residual_knn_nw__a1.0_k1024_bw0.5",
+    "method": "mirafzali_residual_knn_nw",
+    "n_seeds": 3,
+    "mmd_mean": 0.001157631476720174,
+    "mmd_std": 0.0004176015608973061,
+    "sw_mean": 1.0132602001276771,
+    "sw_std": 0.01767346725580591,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 218.25333333333333
+  }
+]

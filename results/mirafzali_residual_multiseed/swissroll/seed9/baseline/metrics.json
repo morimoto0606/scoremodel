@@ -1,0 +1,7 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": 0.0006490945816040039,
+  "sliced_wasserstein": 2.0441254222989516,
+  "reverse_init": "stationary"
+}

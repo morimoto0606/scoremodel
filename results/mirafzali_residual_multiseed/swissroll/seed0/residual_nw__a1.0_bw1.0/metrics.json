@@ -1,0 +1,14 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": 0.0006730854511260986,
+  "sliced_wasserstein": 1.7145235252002131,
+  "reverse_init": "stationary",
+  "residual_alpha": 1.0,
+  "nw_bandwidth_scale": 1.0,
+  "residual_knn_k": 256,
+  "residual_knn_bandwidth_scale": 1.0,
+  "var_H": 2.9847326278686523,
+  "var_residual": 1.7268240451812744,
+  "mean_residual_norm": 1.257167935371399
+}

@@ -103,6 +103,36 @@ def jac_drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Te
     return J
 
 
+def hess_drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor:
+    """
+    Hessian tensor of the drift (second-order derivative).
+
+    For the component-wise drift b_i(x) = -k β(t) (x_i-a) / (1+(x_i-a)²),
+    the only nonzero entries are the fully-diagonal ones:
+
+        H_{i,i,i}(x) = -k β(t) · 2(x_i-a)·((x_i-a)²-3) / (1+(x_i-a)²)³
+
+    Parameters
+    ----------
+    x : (n, 2)
+
+    Returns
+    -------
+    H : (n, 2, 2, 2)  —  H[:, i, j, k] = ∂²b_i / ∂x_j ∂x_k
+    """
+    beta  = beta_at(t, cfg)
+    u     = x - cfg.a                         # (n, 2)
+    u2    = u * u                              # (n, 2)
+    denom = (1.0 + u2) ** 3                   # (n, 2)
+    diag  = -cfg.k * beta * 2.0 * u * (u2 - 3.0) / denom   # (n, 2)
+
+    n = x.shape[0]
+    H = torch.zeros(n, 2, 2, 2, device=x.device, dtype=x.dtype)
+    H[:, 0, 0, 0] = diag[:, 0]
+    H[:, 1, 1, 1] = diag[:, 1]
+    return H
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Forward simulation — positions only (cheap; used for reverse starting points)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -144,8 +174,195 @@ def simulate_forward_nl(
 # Forward simulation + Malliavin weights
 # ──────────────────────────────────────────────────────────────────────────────
 
-@torch.no_grad()
 def simulate_malliavin_nl(
+    X0: torch.Tensor,
+    T: float,
+    cfg: NonlinearSDEConfig,
+    n_steps: int = 250,
+    gamma_reg: float = 1e-3,
+    correction: str = "approx",
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Euler–Maruyama forward simulation with Malliavin score weights.
+
+    Dispatches to a specific implementation via *correction*:
+
+    ``"approx"`` (default)
+        First-variation-only (Y only, no Z).  Fast and numerically stable.
+        Equivalent to the Bismut–Elworthy–Li formula for the nonlinear SDE.
+
+    ``"a_correction"`` (experimental)
+        Tracks the second variation Z and applies the leading A-correction to
+        the Skorokhod divergence (Mirafzali Algorithm 4+5, partial).
+        B/C double-integral corrections are *not* included — see
+        ``_simulate_malliavin_nl_a_correction`` docstring.
+
+    Parameters
+    ----------
+    X0         : (n, 2)
+    T          : terminal time
+    n_steps    : Euler steps
+    gamma_reg  : Tikhonov regularisation for γ inversion
+    correction : one of ``"approx"`` | ``"a_correction"``
+
+    Returns
+    -------
+    X_T : (n, 2) terminal positions
+    H   : (n, 2) Malliavin score weights s.t. ∇_x log p_T ≈ E[H | X_T = x]
+    """
+    if correction == "approx":
+        return _simulate_malliavin_nl_approx(
+            X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
+        )
+    if correction == "a_correction":
+        return _simulate_malliavin_nl_a_correction(
+            X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
+        )
+    raise ValueError(
+        f"Unknown correction {correction!r}. "
+        "Choose from 'approx' or 'a_correction'."
+    )
+
+
+@torch.no_grad()
+def _simulate_malliavin_nl_a_correction(
+    X0: torch.Tensor,
+    T: float,
+    cfg: NonlinearSDEConfig,
+    n_steps: int = 250,
+    gamma_reg: float = 1e-3,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    **Experimental** — Mirafzali Algorithms 4+5 with the A-correction term.
+
+    Tracks X, Y (first variation), Z (second variation) in the forward pass,
+    then computes the Malliavin covariance γ and the Skorokhod integral
+    S − D where D is the leading A-correction from the derivative of γ⁻¹.
+
+    .. note::
+        The B and C double-integral corrections from Appendix D.4 of Mirafzali
+        et al. are **not** implemented here (they require an O(N²) nested loop
+        over time steps).  This function therefore implements only a partial
+        Algorithm 5.  Use ``correction='approx'`` for the stable default.
+
+    Z update (Algorithm 4, using old-step values):
+        J, H evaluated at (x_old, t)
+        T1 = einsum('bimp,bmj,bpl->bijl', H, Y_old, Y_old)
+        T2 = einsum('bim,bmjl->bijl',     J, Z_old)
+        Y_new = Y_old + J @ Y_old * dt
+        Z_new = Z_old + (T1 + T2) * dt
+        x_new = x_old + b * dt + g * dW
+
+    A-correction (single deterministic integral):
+        term1_{b,k} = g² Σ_{i,j,l} (Y_t⁻¹)_{b,i,j} Z_T_{b,i,j,l} (γ⁻¹)_{b,l,k}
+        term2_{b,k} = g² Σ_{i,j,l,m} (Y_t⁻¹)_{b,i,j} Z_t_{b,i,j,l}
+                          (Y_t⁻¹)_{b,l,m} Y_T_{b,p,m} (γ⁻¹)_{b,p,k}
+        D = Σ_t (term1 − term2) * dt
+        δ = S − D,    H = −δ
+
+    Parameters
+    ----------
+    X0        : (n, 2)
+    T         : terminal time
+    n_steps   : Euler steps
+    gamma_reg : Tikhonov regularisation for γ inversion
+
+    Returns
+    -------
+    X_T : (n, 2) terminal positions
+    H   : (n, 2) Malliavin score weights
+    """
+    n       = X0.shape[0]
+    device  = X0.device
+    dtype   = X0.dtype
+    dt      = T / n_steps
+    sqrt_dt = math.sqrt(dt)
+
+    x = X0.clone()
+    Y = torch.eye(2, device=device, dtype=dtype).expand(n, 2, 2).clone()
+    Z = torch.zeros(n, 2, 2, 2, device=device, dtype=dtype)
+
+    Y_all:  list = []
+    Z_all:  list = []
+    dW_all: list = []
+    g_all:  list = []
+
+    # ── Algorithm 4: forward pass (use old-step values for Y/Z updates) ──
+    for k in range(n_steps):
+        t_mid  = (k + 0.5) * dt
+        g      = sigma_t(t_mid, cfg)
+
+        # Save old values *before* the Euler step
+        Y_old = Y
+        Z_old = Z
+        Y_all.append(Y_old.clone())
+        Z_all.append(Z_old.clone())
+        g_all.append(g)
+
+        dW = sqrt_dt * torch.randn(n, 2, device=device, dtype=dtype)
+        dW_all.append(dW)
+
+        # Evaluate J and H at current (old) x
+        J      = jac_drift_nl(x, t_mid, cfg)    # (n,2,2)
+        H_hess = hess_drift_nl(x, t_mid, cfg)   # (n,2,2,2)
+
+        # Euler updates using old Y, Z
+        # T1[b,i,j,l] = Σ_{m,p} H[b,i,m,p] Y_old[b,m,j] Y_old[b,p,l]
+        T1 = torch.einsum('bimp,bmj,bpl->bijl', H_hess, Y_old, Y_old)
+        # T2[b,i,j,l] = Σ_m J[b,i,m] Z_old[b,m,j,l]
+        T2 = torch.einsum('bim,bmjl->bijl', J, Z_old)
+
+        x = x + drift_nl(x, t_mid, cfg) * dt + g * dW
+        Y = Y_old + torch.bmm(J, Y_old) * dt
+        Z = Z_old + (T1 + T2) * dt
+
+    X_T = x
+    Y_T = Y
+    Z_T = Z
+
+    # ── Malliavin covariance γ ────────────────────────────────────────────
+    gamma    = torch.zeros(n, 2, 2, device=device, dtype=dtype)
+    invY_all: list = []
+    W_all:    list = []
+
+    for Ys, gs in zip(Y_all, g_all):
+        invYs = torch.linalg.inv(Ys)
+        Ws    = gs * torch.bmm(Y_T, invYs)    # W_s = g_s Y_T Y_s⁻¹
+        gamma += torch.bmm(Ws, Ws.transpose(1, 2)) * dt
+        invY_all.append(invYs)
+        W_all.append(Ws)
+
+    eye2      = torch.eye(2, device=device, dtype=dtype).expand(n, 2, 2)
+    gamma_inv = torch.linalg.inv(gamma + gamma_reg * eye2)
+
+    # ── Stochastic term S ─────────────────────────────────────────────────
+    S = torch.zeros(n, 2, device=device, dtype=dtype)
+    for Ws, dW in zip(W_all, dW_all):
+        ginvW = torch.bmm(gamma_inv, Ws)
+        S    += torch.bmm(ginvW.transpose(1, 2), dW.unsqueeze(-1)).squeeze(-1)
+
+    # ── A-correction D (single deterministic integral) ────────────────────
+    # TODO: B/C double-integral corrections (Appendix D.4) not yet implemented.
+    D = torch.zeros(n, 2, device=device, dtype=dtype)
+
+    for invYt, Zt, gt in zip(invY_all, Z_all, g_all):
+        g2 = gt * gt
+        # term1: g² Σ_{i,j,l} (Y_t⁻¹)_{b,i,j} Z_T_{b,i,j,l} (γ⁻¹)_{b,l,k}
+        t1 = g2 * torch.einsum('bij,bijl,blk->bk', invYt, Z_T, gamma_inv) * dt
+
+        # term2: g² Σ_{i,j,l,m,p} (Y_t⁻¹)_{b,i,j} Z_t_{b,i,j,l}
+        #            (Y_t⁻¹)_{b,l,m} Y_T_{b,p,m} (γ⁻¹)_{b,p,k}
+        c  = torch.einsum('bij,bijl->bl', invYt, Zt)        # (n,2)
+        c2 = torch.einsum('bl,bml->bm', c, invYt)           # (n,2)
+        t2 = g2 * torch.einsum('bm,bpm,bpk->bk', c2, Y_T, gamma_inv) * dt
+
+        D += t1 - t2
+
+    H = -(S - D)
+    return X_T, H
+
+@torch.no_grad()
+def _simulate_malliavin_nl_approx(
     X0: torch.Tensor,
     T: float,
     cfg: NonlinearSDEConfig,

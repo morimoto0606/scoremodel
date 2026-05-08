@@ -1,0 +1,14 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": 0.0007725059986114502,
+  "sliced_wasserstein": 1.718278874277741,
+  "method": "mirafzali_residual_knn_nw",
+  "residual_alpha": 1.0,
+  "residual_knn_k": 1024,
+  "residual_knn_bandwidth_scale": 1.0,
+  "var_H": 2.9847326278686523,
+  "var_residual": 1.6416393518447876,
+  "mean_residual_norm": 1.232181191444397,
+  "config_key": "mirafzali_residual_knn_nw/a1.00_k1024_bw1.0"
+}

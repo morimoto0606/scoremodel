@@ -1,0 +1,26 @@
+{
+  "residual_nw__a1.0_bw1.0": {
+    "n_paired_seeds": 10,
+    "mean_relative_mmd_improvement": -2.64316477535965,
+    "mean_relative_sw_improvement": 0.0009923698882165963,
+    "mmd_ttest_pvalue": 0.5932547063898433,
+    "sw_ttest_pvalue": 0.23426123021404902,
+    "scipy_available": true
+  },
+  "residual_knn_nw__a1.0_k128_bw0.5": {
+    "n_paired_seeds": 10,
+    "mean_relative_mmd_improvement": -2.619402448861554,
+    "mean_relative_sw_improvement": 0.0009897986290140037,
+    "mmd_ttest_pvalue": 0.6537974000225163,
+    "sw_ttest_pvalue": 0.2642521245201562,
+    "scipy_available": true
+  },
+  "residual_knn_nw__a1.0_k1024_bw0.5": {
+    "n_paired_seeds": 10,
+    "mean_relative_mmd_improvement": -2.4108085483061124,
+    "mean_relative_sw_improvement": 0.0007508947589498556,
+    "mmd_ttest_pvalue": 0.7352905243642236,
+    "sw_ttest_pvalue": 0.3037702234810606,
+    "scipy_available": true
+  }
+}

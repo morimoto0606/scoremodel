@@ -27,8 +27,10 @@ from scoremodel_ext.malliavin.sde_nonlinear import (
     sigma_t,
     drift_nl,
     jac_drift_nl,
+    hess_drift_nl,
     simulate_forward_nl,
     simulate_malliavin_nl,
+    _simulate_malliavin_nl_approx,
     reverse_euler_nl,
 )
 from scoremodel_ext.malliavin.experiment_mirafzali_nonlinear import (
@@ -37,6 +39,10 @@ from scoremodel_ext.malliavin.experiment_mirafzali_nonlinear import (
     build_training_dataset_nl,
     compute_metrics_nl,
     build_results_table,
+    compute_residuals_nl,
+    ResidualCorrectionModel,
+    run_residual_sweep,
+    run_residual_multiseed_eval,
     DEFAULT_NL_CFG,
     _n_steps_for,
     _binned_score_at_points,
@@ -993,3 +999,473 @@ class TestTrainMirafzaliSkorokhodNet:
         )
         assert isinstance(model, NormalizedSkorokhodModel)
 
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# hess_drift_nl
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestHessDriftNL:
+    def test_shape(self):
+        cfg = NonlinearSDEConfig()
+        x   = torch.randn(50, 2)
+        H   = hess_drift_nl(x, 0.5, cfg)
+        assert H.shape == (50, 2, 2, 2)
+
+    def test_no_nan(self):
+        cfg = NonlinearSDEConfig()
+        x   = torch.randn(50, 2) * 5.0
+        H   = hess_drift_nl(x, 0.5, cfg)
+        assert not torch.isnan(H).any()
+
+    def test_off_diagonal_zero(self):
+        """Component-wise drift: only H[:,i,i,i] nonzero (fully diagonal)."""
+        cfg = NonlinearSDEConfig()
+        x   = torch.randn(20, 2) * 2.0
+        H   = hess_drift_nl(x, 0.5, cfg)
+        # All off-diagonal entries must be zero
+        for i in range(2):
+            for j in range(2):
+                for k in range(2):
+                    if not (i == j == k):
+                        assert H[:, i, j, k].abs().max().item() < 1e-6, \
+                            f"H[:,{i},{j},{k}] should be zero"
+
+    def test_matches_finite_diff(self):
+        """∂²b_0/∂x_0² from finite differences matches H[:,0,0,0]."""
+        cfg = NonlinearSDEConfig(k=1.0, beta_min=3.0, beta_max=3.0, T=1.0, a=0.0)
+        x0  = torch.tensor([[0.5, -0.8]])
+        eps = 1e-3
+        xp  = x0.clone(); xp[0, 0] += eps
+        xm  = x0.clone(); xm[0, 0] -= eps
+        fd  = (drift_nl(xp, 0.5, cfg)[0, 0]
+               - 2 * drift_nl(x0, 0.5, cfg)[0, 0]
+               + drift_nl(xm, 0.5, cfg)[0, 0]) / eps**2
+        H   = hess_drift_nl(x0, 0.5, cfg)[0, 0, 0, 0]
+        assert abs(float(H) - float(fd)) < 0.1
+
+    def test_scales_with_beta(self):
+        """Hessian magnitude should scale with β(t)."""
+        cfg = NonlinearSDEConfig(beta_min=1.0, beta_max=25.0, T=1.0)
+        x   = torch.ones(5, 2) * 0.8
+        H_early = hess_drift_nl(x, 0.01, cfg).abs().mean().item()
+        H_late  = hess_drift_nl(x, 0.99, cfg).abs().mean().item()
+        assert H_late > H_early
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# simulate_malliavin_nl — full Algorithm 4+5 (new implementation)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestSimulateMalliavinNLFull:
+    """Test the dispatcher and all correction variants of simulate_malliavin_nl."""
+
+    @pytest.fixture(scope="class")
+    def result_full(self):
+        X0, _ = sample_8gmm(_MINI_N, device=DEVICE)
+        X_T, H = simulate_malliavin_nl(
+            X0, T=0.5, cfg=_MINI_CFG,
+            n_steps=_MINI_STEPS, gamma_reg=1e-2,
+        )
+        return X0, X_T, H
+
+    def test_shapes(self, result_full):
+        X0, X_T, H = result_full
+        assert X_T.shape == (_MINI_N, 2)
+        assert H.shape   == (_MINI_N, 2)
+
+    def test_X_T_finite(self, result_full):
+        _, X_T, _ = result_full
+        assert torch.isfinite(X_T).all()
+
+    def test_H_finite(self, result_full):
+        _, _, H = result_full
+        assert torch.isfinite(H).all()
+
+    def test_H_not_all_zero(self, result_full):
+        """Score weight must not be trivially zero."""
+        _, _, H = result_full
+        assert H.abs().mean().item() > 1e-4
+
+    def test_gamma_positive_definite(self):
+        """Malliavin covariance should be positive definite (tested via successful inversion)."""
+        X0, _ = sample_8gmm(50, device=DEVICE)
+        # Indirect test: with very small gamma_reg the result should still be finite.
+        X_T, H = simulate_malliavin_nl(
+            X0, T=0.5, cfg=_MINI_CFG, n_steps=_MINI_STEPS, gamma_reg=1e-5,
+        )
+        assert torch.isfinite(H).all()
+
+    def test_default_equals_approx(self):
+        """Default correction='approx' must return identical results to _simulate_malliavin_nl_approx."""
+        torch.manual_seed(42)
+        X0, _ = sample_8gmm(100, device=DEVICE)
+        X0_copy = X0.clone()
+
+        torch.manual_seed(42)
+        _, H_default = simulate_malliavin_nl(
+            X0, T=0.3, cfg=_MINI_CFG, n_steps=10, gamma_reg=1e-2,
+        )
+        torch.manual_seed(42)
+        _, H_approx = _simulate_malliavin_nl_approx(
+            X0_copy, T=0.3, cfg=_MINI_CFG, n_steps=10, gamma_reg=1e-2,
+        )
+
+        assert torch.allclose(H_default, H_approx), \
+            "Default (approx) and _simulate_malliavin_nl_approx must be identical"
+
+    def test_a_correction_runs_finite(self):
+        """correction='a_correction' should complete without NaN/Inf."""
+        X0, _ = sample_8gmm(50, device=DEVICE)
+        _, H = simulate_malliavin_nl(
+            X0, T=0.3, cfg=_MINI_CFG, n_steps=10, gamma_reg=1e-2,
+            correction="a_correction",
+        )
+        assert torch.isfinite(H).all(), "a_correction H must be finite"
+
+    def test_invalid_correction_raises(self):
+        """Unknown correction string must raise ValueError."""
+        X0, _ = sample_8gmm(10, device=DEVICE)
+        with pytest.raises(ValueError, match="Unknown correction"):
+            simulate_malliavin_nl(
+                X0, T=0.3, cfg=_MINI_CFG, n_steps=5,
+                correction="bogus",
+            )
+
+    @pytest.mark.parametrize("T", [0.2, 0.5, 1.0])
+    def test_various_T(self, T):
+        X0, _ = sample_8gmm(80, device=DEVICE)
+        X_T, H = simulate_malliavin_nl(
+            X0, T=T, cfg=_MINI_CFG,
+            n_steps=max(5, round(T * 15)), gamma_reg=1e-2,
+        )
+        assert torch.isfinite(X_T).all()
+        assert torch.isfinite(H).all()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Residual correction
+# ──────────────────────────────────────────────────────────────────────────────
+
+_MINI_SIM_TIMES = [0.30, 0.80]   # two time steps — enough to test per-time grouping
+_MINI_N_RESID   = 150            # small but enough for bin tables / NW
+
+
+class TestResidualCorrectionNL:
+    """Tests for compute_residuals_nl and ResidualCorrectionModel."""
+
+    @pytest.fixture(scope="class")
+    def sim_cache_small(self):
+        """Tiny simulation cache shared across tests."""
+        return simulate_all_times_nl(
+            times=_MINI_SIM_TIMES,
+            dataset_name="swissroll",
+            cfg=_MINI_CFG,
+            n_paths=_MINI_N_RESID,
+            n_steps_per_unit=_MINI_STEPS,
+            gamma_reg=1e-2,
+            device=DEVICE,
+            correction="approx",
+        )
+
+    @pytest.fixture(scope="class")
+    def base_model_and_data(self, sim_cache_small):
+        """Train a tiny mirafzali model and return model + training tensors."""
+        dataset_tuple = build_training_dataset_nl(
+            sim_cache_small, "mirafzali",
+            teacher_eval_points="raw_points",
+        )
+        assert dataset_tuple is not None
+        t_tr, x_tr, H_tr, _ = dataset_tuple
+        model = train_mirafzali_skorokhod_net(
+            t_tr, x_tr, H_tr,
+            n_epochs=5, batch_size=64, lr=1e-3,
+            hidden=32, n_blocks=1, num_frequencies=4,
+            device=DEVICE,
+        )
+        return model, t_tr, x_tr, H_tr
+
+    # —— compute_residuals_nl —————————————————————————————————
+
+    def test_residual_shape(self, base_model_and_data):
+        model, t_tr, x_tr, H_tr = base_model_and_data
+        r_tr, diags = compute_residuals_nl(model, t_tr, x_tr, H_tr, device=DEVICE)
+        assert r_tr.shape == H_tr.shape, "residual must match H_tr shape"
+
+    def test_residual_no_nan(self, base_model_and_data):
+        model, t_tr, x_tr, H_tr = base_model_and_data
+        r_tr, diags = compute_residuals_nl(model, t_tr, x_tr, H_tr, device=DEVICE)
+        assert torch.isfinite(r_tr).all(), "residuals must be finite"
+
+    def test_residual_diagnostics_keys(self, base_model_and_data):
+        model, t_tr, x_tr, H_tr = base_model_and_data
+        _, diags = compute_residuals_nl(model, t_tr, x_tr, H_tr, device=DEVICE)
+        for key in ("var_H", "var_residual", "mean_residual_norm"):
+            assert key in diags, f"missing diagnostics key {key!r}"
+            assert isinstance(diags[key], float)
+
+    # —— ResidualCorrectionModel ——————————————————————————————
+
+    def _build_corrected(self, base_model_and_data, mode, alpha=1.0,
+                          nw_bandwidth_scale=1.0, knn_k=32, knn_bandwidth_scale=1.0):
+        model, t_tr, x_tr, H_tr = base_model_and_data
+        r_tr, _ = compute_residuals_nl(model, t_tr, x_tr, H_tr, device=DEVICE)
+        unique_times = sorted({float(t.item()) for t in t_tr.unique()})
+        X_T_by_t, R_by_t = [], []
+        for Tc in unique_times:
+            mask = (t_tr.cpu() - Tc).abs() < 1e-5
+            X_T_by_t.append(x_tr.cpu()[mask])
+            R_by_t.append(r_tr[mask])
+        return ResidualCorrectionModel(
+            model, unique_times, X_T_by_t, R_by_t,
+            mode=mode, alpha=alpha, n_bins=20, nw_n_ref=50,
+            nw_bandwidth_scale=nw_bandwidth_scale,
+            knn_k=knn_k, knn_bandwidth_scale=knn_bandwidth_scale,
+        )
+
+    @pytest.mark.parametrize("mode", ["binned", "nw", "knn_nw"])
+    def test_corrected_output_shape(self, base_model_and_data, mode):
+        cm = self._build_corrected(base_model_and_data, mode)
+        cm.eval()
+        cm = cm.to(DEVICE)
+        n = 40
+        x  = torch.randn(n, 2, device=DEVICE)
+        t  = torch.full((n,), 0.5, device=DEVICE)
+        out = cm(t, x)
+        assert out.shape == (n, 2), f"output shape mismatch for mode={mode!r}"
+
+    @pytest.mark.parametrize("mode", ["binned", "nw", "knn_nw"])
+    def test_corrected_output_finite(self, base_model_and_data, mode):
+        cm = self._build_corrected(base_model_and_data, mode)
+        cm.eval()
+        cm = cm.to(DEVICE)
+        x  = torch.randn(30, 2, device=DEVICE)
+        t  = torch.full((30,), 0.3, device=DEVICE)
+        out = cm(t, x)
+        assert torch.isfinite(out).all(), f"corrected output not finite for mode={mode!r}"
+
+    def test_invalid_mode_raises(self, base_model_and_data):
+        model, t_tr, x_tr, H_tr = base_model_and_data
+        r_tr, _ = compute_residuals_nl(model, t_tr, x_tr, H_tr, device=DEVICE)
+        unique_times = sorted({float(t.item()) for t in t_tr.unique()})
+        X_T_by_t = [x_tr.cpu()[:(x_tr.shape[0]//2)]]
+        R_by_t   = [r_tr[:(r_tr.shape[0]//2)]]
+        with pytest.raises(ValueError, match="unknown mode"):
+            ResidualCorrectionModel(
+                model, unique_times[:1], X_T_by_t, R_by_t, mode="bad_mode",
+            )
+
+    # —— reverse sampling smoke test ————————————————————————————
+
+    @pytest.mark.parametrize("mode", ["binned", "nw", "knn_nw"])
+    def test_reverse_sampling_smoke(self, base_model_and_data, mode):
+        """Corrected model must yield finite samples from reverse_euler_nl."""
+        cm = self._build_corrected(base_model_and_data, mode)
+        cm.eval()
+        cm = cm.to(DEVICE)
+        X_T = torch.randn(20, 2, device=DEVICE)
+        samples = reverse_euler_nl(cm, X_T, _MINI_CFG, n_steps=5)
+        assert samples.shape == (20, 2)
+        nan_rate = torch.isnan(samples).any(dim=1).float().mean().item()
+        assert nan_rate < 0.5, f"too many NaN samples for mode={mode!r}: {nan_rate:.2f}"
+
+    # —— alpha shrinkage ————————————————————————————————
+
+    def test_alpha_zero_equals_base(self, base_model_and_data):
+        """alpha=0 must produce identical output to the base model."""
+        model, t_tr, x_tr, H_tr = base_model_and_data
+        cm = self._build_corrected(base_model_and_data, "binned", alpha=0.0)
+        cm.eval()
+        cm = cm.to(DEVICE)
+        model.eval()
+        x = torch.randn(20, 2, device=DEVICE)
+        t = torch.full((20,), 0.3, device=DEVICE)
+        with torch.no_grad():
+            out_cm   = cm(t, x)
+            out_base = model.to(DEVICE)(t, x)
+        assert torch.allclose(out_cm, out_base), \
+            "alpha=0 corrected output must equal base model output"
+
+    @pytest.mark.parametrize("alpha", [0.25, 0.5, 0.75])
+    def test_alpha_partial_finite(self, base_model_and_data, alpha):
+        cm = self._build_corrected(base_model_and_data, "binned", alpha=alpha)
+        cm.eval()
+        cm = cm.to(DEVICE)
+        x  = torch.randn(20, 2, device=DEVICE)
+        t  = torch.full((20,), 0.5, device=DEVICE)
+        out = cm(t, x)
+        assert torch.isfinite(out).all(), f"alpha={alpha} produced non-finite output"
+
+    # —— bandwidth params ———————————————————————————————
+
+    @pytest.mark.parametrize("bw", [0.5, 2.0, 4.0])
+    def test_nw_bandwidth_scale_finite(self, base_model_and_data, bw):
+        cm = self._build_corrected(base_model_and_data, "nw", nw_bandwidth_scale=bw)
+        cm.eval()
+        cm = cm.to(DEVICE)
+        x  = torch.randn(20, 2, device=DEVICE)
+        t  = torch.full((20,), 0.3, device=DEVICE)
+        assert torch.isfinite(cm(t, x)).all(), f"nw bw={bw} produced non-finite output"
+
+    @pytest.mark.parametrize("k,bw", [(16, 0.5), (32, 1.0), (64, 2.0)])
+    def test_knn_params_finite(self, base_model_and_data, k, bw):
+        cm = self._build_corrected(
+            base_model_and_data, "knn_nw", knn_k=k, knn_bandwidth_scale=bw
+        )
+        cm.eval()
+        cm = cm.to(DEVICE)
+        x  = torch.randn(20, 2, device=DEVICE)
+        t  = torch.full((20,), 0.3, device=DEVICE)
+        assert torch.isfinite(cm(t, x)).all(), f"knn_nw k={k} bw={bw} produced non-finite output"
+
+    # —— run_residual_sweep smoke test ————————————————————————
+
+    def test_sweep_smoke(self, tmp_path):
+        """Minimal sweep: 1 alpha, 1 bw, 1 k — verify structure of returned dict."""
+        results = run_residual_sweep(
+            dataset="swissroll",
+            outbase=str(tmp_path / "sweep"),
+            alphas=(0.5,),
+            nw_bandwidth_scales=(1.0,),
+            knn_ks=(32,),
+            knn_bandwidth_scales=(1.0,),
+            cfg=_MINI_CFG,
+            times=_MINI_SIM_TIMES,
+            seed=0,
+            mirafzali_mode=False,
+            n_paths=_MINI_N_RESID,
+            n_epochs=3,
+            batch_size=32,
+            lr=1e-3,
+            n_samples_reverse=50,
+            n_steps_per_unit=_MINI_STEPS,
+            hidden=32,
+            n_blocks=1,
+            num_frequencies=4,
+        )
+        assert len(results) > 0, "sweep returned empty dict"
+        # Every returned config should have mmd_rbf key
+        for key, m in results.items():
+            assert "mmd_rbf" in m, f"mmd_rbf missing in config {key!r}"
+        # Check output files exist
+        out = tmp_path / "sweep" / "swissroll"
+        assert (out / "sweep_summary.json").exists()
+        assert (out / "best_by_mmd.json").exists()
+        assert (out / "best_by_sw.json").exists()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Multi-seed evaluation runner
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Minimal configs for smoke tests: only baseline + one residual variant
+_SMOKE_MULTISEED_CONFIGS = [
+    {
+        "_key": "baseline",
+        "method": "mirafzali",
+    },
+    {
+        "_key": "residual_nw__a1.0_bw1.0",
+        "method": "mirafzali_residual_nw",
+        "residual_alpha": 1.0,
+        "nw_bandwidth_scale": 1.0,
+    },
+]
+
+
+class TestResidualMultiseedEval:
+    """Smoke tests for run_residual_multiseed_eval."""
+
+    def test_smoke_single_seed(self, tmp_path):
+        """
+        Single seed, two tiny configs — verify all output files exist
+        and the returned dict has the expected structure.
+        """
+        results = run_residual_multiseed_eval(
+            dataset="swissroll",
+            outbase=str(tmp_path / "multiseed"),
+            seeds=[0],
+            configs=_SMOKE_MULTISEED_CONFIGS,
+            cfg=_MINI_CFG,
+            times=_MINI_SIM_TIMES,
+            correction="approx",
+            hidden=32,
+            n_blocks=1,
+            num_frequencies=4,
+            n_paths=_MINI_N_RESID,
+            n_epochs=3,
+            batch_size=32,
+            lr=1e-3,
+            n_samples_reverse=50,
+            n_steps_per_unit=_MINI_STEPS,
+            mirafzali_mode=False,
+        )
+
+        # ── Return value structure ────────────────────────────────────────
+        assert "raw" in results
+        assert "summary" in results
+        assert "paired_tests" in results
+
+        raw = results["raw"]
+        # 1 seed × 2 configs = 2 rows
+        assert len(raw) == 2, f"expected 2 raw rows, got {len(raw)}"
+        for row in raw:
+            for key in ("seed", "config_key", "method", "mmd_rbf",
+                        "sliced_wasserstein", "nan_rate", "elapsed_seconds"):
+                assert key in row, f"missing key {key!r} in raw row"
+
+        summary = results["summary"]
+        assert len(summary) == 2, f"expected 2 summary rows, got {len(summary)}"
+        config_keys_in_summary = {r["config_key"] for r in summary}
+        for ck in ["baseline", "residual_nw__a1.0_bw1.0"]:
+            assert ck in config_keys_in_summary, f"{ck!r} missing from summary"
+        for row in summary:
+            for key in ("mmd_mean", "sw_mean", "nan_rate_mean", "mean_runtime", "n_seeds"):
+                assert key in row, f"missing key {key!r} in summary row"
+
+        paired = results["paired_tests"]
+        assert "residual_nw__a1.0_bw1.0" in paired
+        pt = paired["residual_nw__a1.0_bw1.0"]
+        for key in ("mean_relative_mmd_improvement", "mean_relative_sw_improvement",
+                    "mmd_ttest_pvalue", "sw_ttest_pvalue", "scipy_available"):
+            assert key in pt, f"missing key {key!r} in paired_tests entry"
+
+        # ── Output files ─────────────────────────────────────────────────
+        out = tmp_path / "multiseed" / "swissroll"
+        assert (out / "raw_results.json").exists(), "raw_results.json missing"
+        assert (out / "raw_results.csv").exists(),  "raw_results.csv missing"
+        assert (out / "summary.json").exists(),      "summary.json missing"
+        assert (out / "summary.csv").exists(),       "summary.csv missing"
+        assert (out / "paired_tests.json").exists(), "paired_tests.json missing"
+
+        # Each (seed, config) run directory should contain metrics.json
+        for cfg_key in ["baseline", "residual_nw__a1.0_bw1.0"]:
+            mpath = out / "seed0" / cfg_key / "metrics.json"
+            assert mpath.exists(), f"metrics.json missing for seed0/{cfg_key}"
+
+    def test_summary_has_all_configs(self, tmp_path):
+        """summary dict contains an entry for every config passed in."""
+        results = run_residual_multiseed_eval(
+            dataset="swissroll",
+            outbase=str(tmp_path / "multiseed2"),
+            seeds=[0],
+            configs=_SMOKE_MULTISEED_CONFIGS,
+            cfg=_MINI_CFG,
+            times=_MINI_SIM_TIMES,
+            correction="approx",
+            hidden=32,
+            n_blocks=1,
+            num_frequencies=4,
+            n_paths=_MINI_N_RESID,
+            n_epochs=3,
+            batch_size=32,
+            lr=1e-3,
+            n_samples_reverse=50,
+            n_steps_per_unit=_MINI_STEPS,
+            mirafzali_mode=False,
+        )
+        summary_keys = {r["config_key"] for r in results["summary"]}
+        expected_keys = {c["_key"] for c in _SMOKE_MULTISEED_CONFIGS}
+        assert summary_keys == expected_keys, (
+            f"summary keys mismatch: {summary_keys} != {expected_keys}"
+        )

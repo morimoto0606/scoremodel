@@ -1,0 +1,22 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": 0.0011607110500335693,
+  "sliced_wasserstein": 1.2869143477924654,
+  "mode_coverage": {
+    "n_covered": 8,
+    "n_modes": 8,
+    "coverage_fraction": 1.0,
+    "min_proportion": 0.1128,
+    "max_proportion": 0.1346,
+    "mean_nearest_dist": 0.2819783687591553
+  },
+  "reverse_init": "stationary",
+  "residual_alpha": 1.0,
+  "nw_bandwidth_scale": 1.0,
+  "residual_knn_k": 128,
+  "residual_knn_bandwidth_scale": 0.5,
+  "var_H": 3.0363657474517822,
+  "var_residual": 0.7950243353843689,
+  "mean_residual_norm": 0.8598567247390747
+}

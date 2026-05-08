@@ -1,0 +1,46 @@
+[
+  {
+    "config_key": "baseline",
+    "method": "mirafzali",
+    "n_seeds": 10,
+    "mmd_mean": 0.0014194130897521972,
+    "mmd_std": 0.002654005178253747,
+    "sw_mean": 1.2843903645902945,
+    "sw_std": 0.013437556882530701,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 205.58599999999996
+  },
+  {
+    "config_key": "residual_nw__a1.0_bw1.0",
+    "method": "mirafzali_residual_nw",
+    "n_seeds": 10,
+    "mmd_mean": 0.0015662014484405518,
+    "mmd_std": 0.002886771479293882,
+    "sw_mean": 1.283095077694135,
+    "sw_std": 0.011479244951633763,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 213.74499999999998
+  },
+  {
+    "config_key": "residual_knn_nw__a1.0_k128_bw0.5",
+    "method": "mirafzali_residual_knn_nw",
+    "n_seeds": 10,
+    "mmd_mean": 0.0015357404947280884,
+    "mmd_std": 0.002808106817085542,
+    "sw_mean": 1.2830962169515614,
+    "sw_std": 0.011278550833400767,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 217.283
+  },
+  {
+    "config_key": "residual_knn_nw__a1.0_k1024_bw0.5",
+    "method": "mirafzali_residual_knn_nw",
+    "n_seeds": 10,
+    "mmd_mean": 0.0015068501234054565,
+    "mmd_std": 0.002840902282132559,
+    "sw_mean": 1.283405633589472,
+    "sw_std": 0.011446228134641507,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 217.936
+  }
+]
