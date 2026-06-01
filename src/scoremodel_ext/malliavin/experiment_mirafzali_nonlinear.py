@@ -179,7 +179,7 @@ def run_experiment_nl(
             times, dataset, cfg,
             n_paths=n_paths, n_steps_per_unit=n_steps_per_unit,
             gamma_reg=gamma_reg, device=device,
-            correction=config_correction,
+            correction=correction,
         )
 
     # ── build training dataset ─────────────────────────────────────────────
@@ -872,7 +872,7 @@ def run_residual_multiseed_eval(
         dataset=dataset,
         cfg=cfg,
         times=times,
-        correction=config_correction,
+        correction=correction,
         hidden=hidden,
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
@@ -909,6 +909,7 @@ def run_residual_multiseed_eval(
             metrics = run_experiment_nl(
                 **_shared,
                 **cfg_entry,
+                correction=config_correction,
                 seed=seed,
                 _outdir_override=str(run_outdir),
             )
@@ -942,7 +943,7 @@ def run_residual_multiseed_eval(
     for cfg_entry in configs:
         cfg_entry = dict(cfg_entry)
         config_key = cfg_entry.pop("_key")
-            config_correction = cfg_entry.pop("correction", correction)
+        config_correction = cfg_entry.pop("correction", correction)
         method      = cfg_entry.get("method", "")
         sub = raw_df[raw_df["config_key"] == config_key]
         if sub.empty:
@@ -954,6 +955,7 @@ def run_residual_multiseed_eval(
         summary_rows.append({
             "config_key":    config_key,
             "method":        method,
+            "correction":    config_correction,
             "n_seeds":       len(sub),
             "mmd_mean":      float(np.mean(mmds))  if mmds  else None,
             "mmd_std":       float(np.std(mmds, ddof=1)) if len(mmds) > 1 else None,
