@@ -179,7 +179,7 @@ def run_experiment_nl(
             times, dataset, cfg,
             n_paths=n_paths, n_steps_per_unit=n_steps_per_unit,
             gamma_reg=gamma_reg, device=device,
-            correction=correction,
+            correction=config_correction,
         )
 
     # ── build training dataset ─────────────────────────────────────────────
@@ -872,7 +872,7 @@ def run_residual_multiseed_eval(
         dataset=dataset,
         cfg=cfg,
         times=times,
-        correction=correction,
+        correction=config_correction,
         hidden=hidden,
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
@@ -895,6 +895,7 @@ def run_residual_multiseed_eval(
         for cfg_entry in configs:
             cfg_entry = dict(cfg_entry)          # copy so we can pop
             config_key = cfg_entry.pop("_key")
+            config_correction = cfg_entry.pop("correction", correction)
             method      = cfg_entry["method"]
 
             run_outdir = outdir_ds / f"seed{seed}" / config_key
@@ -941,6 +942,7 @@ def run_residual_multiseed_eval(
     for cfg_entry in configs:
         cfg_entry = dict(cfg_entry)
         config_key = cfg_entry.pop("_key")
+            config_correction = cfg_entry.pop("correction", correction)
         method      = cfg_entry.get("method", "")
         sub = raw_df[raw_df["config_key"] == config_key]
         if sub.empty:
@@ -981,6 +983,7 @@ def run_residual_multiseed_eval(
     for cfg_entry in configs[1:]:
         cfg_entry  = dict(cfg_entry)
         config_key = cfg_entry.pop("_key")
+            config_correction = cfg_entry.pop("correction", correction)
         sub = raw_df[raw_df["config_key"] == config_key].sort_values("seed")
 
         # Align on seeds present in both
