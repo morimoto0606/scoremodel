@@ -985,7 +985,7 @@ def run_residual_multiseed_eval(
     for cfg_entry in configs[1:]:
         cfg_entry  = dict(cfg_entry)
         config_key = cfg_entry.pop("_key")
-            config_correction = cfg_entry.pop("correction", correction)
+        config_correction = cfg_entry.pop("correction", correction)
         sub = raw_df[raw_df["config_key"] == config_key].sort_values("seed")
 
         # Align on seeds present in both
