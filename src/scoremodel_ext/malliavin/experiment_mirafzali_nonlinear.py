@@ -872,7 +872,6 @@ def run_residual_multiseed_eval(
         dataset=dataset,
         cfg=cfg,
         times=times,
-        correction=correction,
         hidden=hidden,
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
