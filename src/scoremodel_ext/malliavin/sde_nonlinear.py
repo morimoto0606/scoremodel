@@ -15,7 +15,7 @@ Default configuration (Mirafzali Appendix C):
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Tuple
 
 import torch
@@ -74,7 +74,7 @@ def drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor
     return -cfg.k * beta * u / (1.0 + u * u)
 
 
-def hess_drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor:
+def hess_drift_diag_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor:
     """
     Diagonal second derivative of the drift (Hessian):
 
@@ -198,8 +198,7 @@ def simulate_forward_nl(
 # Forward simulation + Malliavin weights
 # ──────────────────────────────────────────────────────────────────────────────
 
-@torch.no_grad()
-def simulate_malliavin_nl_approx(
+def simulate_malliavin_nl(
     X0: torch.Tensor,
     T: float,
     cfg: NonlinearSDEConfig,
@@ -208,44 +207,30 @@ def simulate_malliavin_nl_approx(
     correction: str = "approx",
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Euler–Maruyama forward simulation with Malliavin score weights.
-
-    Dispatches to a specific implementation via *correction*:
-
-    ``"approx"`` (default)
-        First-variation-only (Y only, no Z).  Fast and numerically stable.
-        Equivalent to the Bismut–Elworthy–Li formula for the nonlinear SDE.
-
-    ``"a_correction"`` (experimental)
-        Tracks the second variation Z and applies the leading A-correction to
-        the Skorokhod divergence (Mirafzali Algorithm 4+5, partial).
-        B/C double-integral corrections are *not* included — see
-        ``_simulate_malliavin_nl_a_correction`` docstring.
+    Dispatch to the requested nonlinear Malliavin-weight implementation.
 
     Parameters
     ----------
-    X0         : (n, 2)
-    T          : terminal time
-    n_steps    : Euler steps
-    gamma_reg  : Tikhonov regularisation for γ inversion
-    correction : one of ``"approx"`` | ``"a_correction"``
-
-    Returns
-    -------
-    X_T : (n, 2) terminal positions
-    H   : (n, 2) Malliavin score weights s.t. ∇_x log p_T ≈ E[H | X_T = x]
+    correction : "approx" (default), "a_correction", or "mirafzali_full"
+        "approx" is the stable first-variation-only implementation.
+        "a_correction" adds the experimental A-correction only.
+        "mirafzali_full" currently calls a diagonal specialized attempt,
+        not a verified faithful implementation of the paper's full Algorithm 5.
     """
     if correction == "approx":
-        return _simulate_malliavin_nl_approx(
+        return simulate_malliavin_nl_approx(
             X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
         )
     if correction == "a_correction":
         return _simulate_malliavin_nl_a_correction(
             X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
         )
+    if correction == "mirafzali_full":
+        return simulate_malliavin_nl_mirafzali_full(
+            X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
+        )
     raise ValueError(
-        f"Unknown correction {correction!r}. "
-        "Choose from 'approx' or 'a_correction'."
+        f"Unknown correction={correction!r}; expected 'approx', 'a_correction', or 'mirafzali_full'"
     )
 
 
@@ -387,7 +372,7 @@ def _simulate_malliavin_nl_a_correction(
     return X_T, H
 
 @torch.no_grad()
-def _simulate_malliavin_nl_approx(
+def simulate_malliavin_nl_approx(
     X0: torch.Tensor,
     T: float,
     cfg: NonlinearSDEConfig,
@@ -492,7 +477,15 @@ def simulate_malliavin_nl_mirafzali_full(
     gamma_reg: float = 1e-3,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Full Algorithm 4 + 5 Malliavin weight computation.
+    Diagonal specialized implementation attempt for Algorithm 4 + 5.
+
+    This implementation uses the exact diagonal specialization of Algorithm 5
+    for the component-wise nonlinear SDE in Appendix C.  Since the drift
+    Jacobian, Hessian, flow Y, second variation Z, Malliavin covariance, W,
+    Omega, I1, I2, A, B and C are all diagonal for this model, the matrix/tensor
+    equations reduce to element-wise scalar equations for each coordinate.
+    The B and C terms are still computed through the Algorithm 5 time
+    integrals; they are not replaced by the previous I1(u,u)-only shortcut.
 
     Tracks the second variation Z (3rd-order tensor) in addition to X and Y,
     then computes correction terms Ω, Θ, I₁, I₂, A, B, C and the
@@ -563,7 +556,7 @@ def simulate_malliavin_nl_mirafzali_full(
         # Euler step for Z: dZ_{iab} = Σ_j h_j δ_{ij} Y_{ja} Y_{jb} dt + Σ_j J_{ij} Z_{jab} dt
         # For diagonal J and diagonal hessian:
         #   dZ_{iab} = h_i Y_{ia} Y_{ib} dt + J_{ii} Z_{iab} dt
-        h = hess_drift_nl(x, t_mid, cfg)                    # (n, d)  diagonal hessian
+        h = hess_drift_diag_nl(x, t_mid, cfg)               # (n, d)  diagonal hessian
         # h_i Y_{ia} Y_{ib}: einsum 'ni,nia,nib->niab'
         hYY = h[:, :, None, None] * Y[:, :, :, None] * Y[:, :, None, :]   # (n, d, d, d)
         # J_{ii} Z_{iab}: einsum 'nij,njab->niab' but J is diagonal so just diag*Z
@@ -683,17 +676,30 @@ def simulate_malliavin_nl_mirafzali_full(
     # Omega_t = g_t * [Z_T_mat @ inv_Yt - Y_T @ inv_Yt @ Z_t_mat @ inv_Yt]
     # where Z_mat collapses one index: Z_mat[n,i,b] = sum_a Z[n,i,a,b] ? No, Z is 3-index...
     # 
-    # PRAGMATIC APPROACH: Since Z_{iab} is symmetric in (a,b) (for commuting partials) and the
-    # Hessian is diagonal (∂²b_i/∂x_j∂x_k = 0 for j≠k or k≠i), Z is diagonal:
-    # Z[n,i,a,b] ≠ 0 only when i=a=b.
-    # So Z can be stored as (n,d) with Z_diag[n,i] = Z[n,i,i,i].
-    # Under this diagonal structure, Omega(t) also simplifies to a (n,d,d) diagonal-ish matrix.
-    # We implement the diagonal-Z version directly.
-
-    # Since J is diagonal (J[n,i,j]=0 for i≠j) and H_xx is diagonal,
-    # the Z update dZ_{iab}/dt = h_i Y_{ia} Y_{ib} + J_{ii} Z_{iab}
-    # means Z_{iab} is only nonzero when i=a=b (all mixed terms start at 0 and remain 0).
-    # Let z_diag[n,i] = Z[n,i,i,i] (the only nonzero element per slice i).
+    # Exact diagonal specialization.
+    #
+    # For the Appendix C SDE, each coordinate evolves independently and the
+    # drift is component-wise.  Therefore J, H, Y, Z, gamma, W, Omega, I1, I2,
+    # A, B and C remain diagonal if initialized diagonally.  We may therefore
+    # work coordinate-by-coordinate with scalar diagonal entries:
+    #
+    #   y_i(t)      = Y_t[i,i]
+    #   z_i(t)      = Z_t[i,i,i]
+    #   gamma_i     = gamma[i,i]
+    #   w_i(v)      = g(v) y_i(T) / y_i(v)
+    #   omega_i(u)  = g(u)/y_i(u) * (z_i(T) - y_i(T) z_i(u)/y_i(u))
+    #
+    # The Algorithm 5 integrals reduce to
+    #
+    #   I1_i(u,v) = 2 omega_i(u) * g(v)/y_i(v) * w_i(v),
+    #   I2_i(u,v) = 2 omega_i(u) * g(v)/y_i(v) * w_i(v),
+    #
+    # with different integration ranges:
+    #
+    #   ∫_0^u I1_i(u,v) dv,
+    #   ∫_0^T I2_i(u,v) dv.
+    #
+    # This is no longer the old I1(u,u)-only shortcut.
 
     # Recompute z_diag for all stored Z_list
     # Z_list stores full (n,d,d,d) tensors from the forward pass; extract diagonal
@@ -727,18 +733,18 @@ def simulate_malliavin_nl_mirafzali_full(
     # = g_t * inv_y_diag_t[n,i] * (z_diag_T[n,i] - y_diag_T[n,i] * inv_y_diag_t[n,i] * z_diag_t[n,i])
     omega_diag_list = []
     for g, inv_y_diag_s, z_diag_s in zip(g_list, inv_y_diag_list, z_diag_list):
-        w_s   = g * y_diag_T * inv_y_diag_s          # (n,d)
-        # Omega_s[i] = g * inv_ys[i] * (z_T[i] - y_T[i]*inv_ys[i]*z_s[i])
-        omega = g * inv_y_diag_s * (z_diag_T - w_s * inv_y_diag_s * z_diag_s)  # (n,d)
+        # omega_i(u) = g(u) / y_i(u) * (z_i(T) - y_i(T) z_i(u) / y_i(u))
+        omega = g * inv_y_diag_s * (z_diag_T - y_diag_T * inv_y_diag_s * z_diag_s)
         omega_diag_list.append(omega)
 
-    # Theta(t,s) = Omega(t)(Y_s^{-1})sigma(s) W_s^T + ... complex; for diagonal:
-    # Theta_ts[n,i] = omega_t[n,i] * g_s * inv_ys[n,i]  (diagonal element)
-    # => I_1(t,s)[n,i] = 2 * omega_t[n,i] * g_s * inv_ys[n,i] * w_s[n,i]  (diagonal, multiply)
-    # => I_2(t,s)[n,i] = 2 * theta_ts[n,i] * w_s[n,i]
-    # For diagonal matrices, matrix products reduce to element-wise products.
-    # I_1(t,s) = Omega_vec(t,s) W_s^T + W_s Omega_vec(t,s)^T  where Omega_vec = Omega(t)*g_s*inv_ys
-    # diagonal: 2 * omega_t * g_s * inv_ys * w_s  (already symmetric for diagonal case)
+    # For diagonal matrices, the Algorithm 5 matrix products reduce to
+    # element-wise products.  Define
+    #     q_i(v) = g(v) / y_i(v) * w_i(v)
+    #            = g(v)^2 y_i(T) / y_i(v)^2.
+    # Then both diagonal integrands reduce to
+    #     I1_i(u,v) = 2 omega_i(u) q_i(v),
+    #     I2_i(u,v) = 2 omega_i(u) q_i(v),
+    # with I1 integrated over v <= u and I2 over all v <= T.
 
     # ── Stochastic term S ─────────────────────────────────────────────────
     # S[n,i] = gamma_inv[n,i] * y_diag_T[n,i] * sum_u (g_u * inv_y_diag_u[n,i] * dW_u[n,i])
@@ -754,39 +760,35 @@ def simulate_malliavin_nl_mirafzali_full(
     # B(u,t_k)[n,i] = y_diag_T[n,i] * gamma_inv_diag[n,i] * cumI1_u[n,i] * gamma_inv_diag[n,i]
     # C(u,t_k)[n,i] = y_diag_T[n,i] * gamma_inv_diag[n,i] * totalI2_u[n,i] * gamma_inv_diag[n,i]
 
-    # Precompute total integral of I_2 over [0, t_k] (doesn't depend on u):
-    # I_2(t,s)[n,i] = 2 * omega_diag_t * g_s * inv_ys * w_s  (diagonal)
-    # total_I2_u = sum_{s=0}^{t_k} I_2(u,s) * dt = 2 * omega_diag_u * (sum_s g_s * inv_ys * w_s * dt)
-    # where sum_s g_s * inv_ys * w_s = sum_s g_s^2 * inv_ys^2 * y_diag_T = y_diag_T * core_diag
-    core_diag = gamma_inv_diag * 0.0  # will accumulate
-    core_diag = torch.zeros(n, d, device=device, dtype=dtype)
-    for inv_y_d, g in zip(inv_y_diag_list, g_list):
-        core_diag += g**2 * inv_y_d**2 * dt  # (n,d)
-    # total I_2 over all s for a given u: 2 * omega_diag_u * y_diag_T * core_diag
-    # => total_I2(u) = 2 * omega_u * y_diag_T * core_diag
+    # q_i(v) = g(v) / y_i(v) * w_i(v) = g(v)^2 y_i(T) / y_i(v)^2.
+    q_list = [g * inv_y_d * w_d for g, inv_y_d, w_d in zip(g_list, inv_y_diag_list, w_diag_list)]
+
+    # Prefix integrals for ∫_0^u q(v) dv and total integral for ∫_0^T q(v) dv.
+    q_prefix_list = []
+    q_prefix = torch.zeros(n, d, device=device, dtype=dtype)
+    for q in q_list:
+        q_prefix = q_prefix + q * dt
+        q_prefix_list.append(q_prefix.clone())
+    q_total = q_prefix
 
     D = torch.zeros(n, d, device=device, dtype=dtype)
-    cumI1 = torch.zeros(n, d, device=device, dtype=dtype)
 
-    for step_u, (inv_y_d, g, z_d, omega_d, w_d) in enumerate(
-        zip(inv_y_diag_list, g_list, z_diag_list, omega_diag_list, w_diag_list)
+    for inv_y_d, g, z_d, omega_d, q_prefix_u in zip(
+        inv_y_diag_list, g_list, z_diag_list, omega_diag_list, q_prefix_list
     ):
-        # A(u) diagonal
-        A_u = g * inv_y_d * (z_diag_T - z_d * inv_y_d * y_diag_T) * gamma_inv_diag   # (n,d)
+        # A_i(u) = g(u)/y_i(u) * (z_i(T) - y_i(T) z_i(u)/y_i(u)) * gamma_i^{-1}
+        A_u = g * inv_y_d * (z_diag_T - y_diag_T * inv_y_d * z_d) * gamma_inv_diag
 
-        # B(u): uses cumI1 accumulated up to u
-        B_u = y_diag_T * gamma_inv_diag * cumI1 * gamma_inv_diag   # (n,d)
+        # B_i(u) = y_i(T) gamma_i^{-1} [∫_0^u I1_i(u,v) dv] gamma_i^{-1}
+        int_I1_u = 2.0 * omega_d * q_prefix_u
+        B_u = y_diag_T * gamma_inv_diag * int_I1_u * gamma_inv_diag
 
-        # C(u): total I_2 integral over [0,T]
-        total_I2 = 2.0 * omega_d * y_diag_T * core_diag              # (n,d)
-        C_u = y_diag_T * gamma_inv_diag * total_I2 * gamma_inv_diag  # (n,d)
+        # C_i(u) = y_i(T) gamma_i^{-1} [∫_0^T I2_i(u,v) dv] gamma_i^{-1}
+        int_I2_u = 2.0 * omega_d * q_total
+        C_u = y_diag_T * gamma_inv_diag * int_I2_u * gamma_inv_diag
 
-        # D contribution: g_u * inv_y_u * (A-B-C) * dt
+        # D_i = ∫ g(u)/y_i(u) [A_i(u) - B_i(u) - C_i(u)] du.
         D += g * inv_y_d * (A_u - B_u - C_u) * dt
-
-        # Update cumI1 for next step: I_1(u,v) at v=u: 2 * omega_u * w_u
-        I1_uu = 2.0 * omega_d * w_d    # (n,d)
-        cumI1 = cumI1 + I1_uu * dt
 
     # ── Assemble δ and H ─────────────────────────────────────────────────
     delta = S - D
@@ -794,31 +796,6 @@ def simulate_malliavin_nl_mirafzali_full(
     return X_T, H
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Dispatcher
-# ──────────────────────────────────────────────────────────────────────────────
-
-def simulate_malliavin_nl(
-    X0: torch.Tensor,
-    T: float,
-    cfg: NonlinearSDEConfig,
-    n_steps: int = 250,
-    gamma_reg: float = 1e-3,
-    correction: str = "approx",
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Dispatch to approximate or full Malliavin weight computation.
-
-    Parameters
-    ----------
-    correction : "approx" (default) or "mirafzali_full"
-    """
-    if correction == "approx":
-        return simulate_malliavin_nl_approx(X0, T, cfg, n_steps, gamma_reg)
-    elif correction == "mirafzali_full":
-        return simulate_malliavin_nl_mirafzali_full(X0, T, cfg, n_steps, gamma_reg)
-    else:
-        raise ValueError(f"Unknown correction={correction!r}; expected 'approx' or 'mirafzali_full'")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
