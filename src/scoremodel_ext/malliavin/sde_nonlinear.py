@@ -464,6 +464,11 @@ def simulate_malliavin_nl_approx(
     return X_T, H
 
 
+# Backwards compatibility: older tests and experiments imported the leading-
+# underscore name directly.
+_simulate_malliavin_nl_approx = simulate_malliavin_nl_approx
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Full Algorithm 4 + 5 implementation (Mirafzali et al.)
 # ──────────────────────────────────────────────────────────────────────────────
