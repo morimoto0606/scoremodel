@@ -198,12 +198,8 @@ def simulate_forward_nl(
 # Forward simulation + Malliavin weights
 # ──────────────────────────────────────────────────────────────────────────────
 
-<<<<<<< HEAD
-def simulate_malliavin_nl(
-=======
 @torch.no_grad()
 def simulate_malliavin_nl_approx(
->>>>>>> d296437 (update)
     X0: torch.Tensor,
     T: float,
     cfg: NonlinearSDEConfig,
