@@ -728,6 +728,44 @@ def run_mirafzali_baseline(
     )
 
 
+def run_mirafzali_full_smoke(
+    dataset: str = "swissroll",
+    n_paths: int = 1000,
+    n_epochs: int = 20,
+    batch_size: int = 256,
+    n_steps_per_unit: int = 50,
+    hidden: int = 512,
+    n_blocks: int = 4,
+    outbase: str = "results/mirafzali_full_smoke",
+    device: str | None = None,
+) -> dict:
+    """
+    Small end-to-end smoke runner for the full Mirafzali correction path.
+
+    Pipeline:
+      full H generation (correction='mirafzali_full')
+      -> MirafzaliSkorokhodNet training
+      -> reverse sampling
+      -> metrics.json output
+    """
+    return run_experiment_nl(
+        dataset=dataset,
+        method="mirafzali",
+        outbase=outbase,
+        n_paths=n_paths,
+        n_epochs=n_epochs,
+        batch_size=batch_size,
+        n_steps_per_unit=n_steps_per_unit,
+        hidden=hidden,
+        n_blocks=n_blocks,
+        correction="mirafzali_full",
+        reverse_init="stationary",
+        n_samples_reverse=2_000,
+        device=device,
+        mirafzali_mode=False,
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Multi-seed evaluation runner
 # ──────────────────────────────────────────────────────────────────────────────
