@@ -1,0 +1,8 @@
+{
+  "time": "2026-02-02 15:54:31",
+  "cmd": "generate.py --outdir ... --seeds=0-63 --batch=8 --steps=18 --solver=heun --network ...",
+  "git": {
+    "scoremodel": "de6f41fcaf16e34290c10efbe394f1bae815fd67",
+    "edm": "008a4e5316c8e3bfe61a62f874bddba254295afb"
+  }
+}

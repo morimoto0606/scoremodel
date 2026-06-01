@@ -74,6 +74,30 @@ def drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor
     return -cfg.k * beta * u / (1.0 + u * u)
 
 
+def hess_drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor:
+    """
+    Diagonal second derivative of the drift (Hessian):
+
+        ∂²b_i/∂x_i² = −k β(t) · 2(x_i − a)((x_i − a)² − 3) / (1 + (x_i − a)²)³
+
+    Off-diagonal entries are zero.
+
+    Parameters
+    ----------
+    x : (n, 2)
+
+    Returns
+    -------
+    hess : (n, 2)  — only the diagonal d²b_i/dx_i² for i in {0,1}
+    """
+    beta = beta_at(t, cfg)
+    u    = x - cfg.a                                     # (n, 2)
+    u2   = u * u
+    num  = 2.0 * u * (u2 - 3.0)
+    denom = (1.0 + u2) ** 3
+    return -cfg.k * beta * num / denom                   # (n, 2)
+
+
 def jac_drift_nl(x: torch.Tensor, t: float, cfg: NonlinearSDEConfig) -> torch.Tensor:
     """
     Diagonal Jacobian of the drift:
@@ -174,7 +198,12 @@ def simulate_forward_nl(
 # Forward simulation + Malliavin weights
 # ──────────────────────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 def simulate_malliavin_nl(
+=======
+@torch.no_grad()
+def simulate_malliavin_nl_approx(
+>>>>>>> d296437 (update)
     X0: torch.Tensor,
     T: float,
     cfg: NonlinearSDEConfig,
@@ -455,7 +484,347 @@ def _simulate_malliavin_nl_approx(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Reverse sampler — Euler–Maruyama
+# Full Algorithm 4 + 5 implementation (Mirafzali et al.)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@torch.no_grad()
+def simulate_malliavin_nl_mirafzali_full(
+    X0: torch.Tensor,
+    T: float,
+    cfg: NonlinearSDEConfig,
+    n_steps: int = 250,
+    gamma_reg: float = 1e-3,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Full Algorithm 4 + 5 Malliavin weight computation.
+
+    Tracks the second variation Z (3rd-order tensor) in addition to X and Y,
+    then computes correction terms Ω, Θ, I₁, I₂, A, B, C and the
+    deterministic correction D so that the Skorokhod integral is
+
+        δ_{t_k}(u_{t_k}) = S − D
+        H = −δ
+
+    where (Algorithm 5, lines 24–26):
+        S = γ⁻¹_{X_{t_k}} Y_{t_k} ∫₀^{t_k} (Y_u⁻¹ σ(u))ᵀ dB_u
+        D = ∫₀^{t_k} (Y_u⁻¹ σ(u))ᵀ [A − B − C](u, t_k) du
+
+    and (Algorithm 5, lines 20–22):
+        A(u,t_k) = [σ(u)ᵀ (Y_u⁻¹)ᵀ (Z_{t_k} − Z_u (Y_u⁻¹)ᵀ Y_{t_k})] γ⁻¹_{X_{t_k}}
+        B(u,t_k) = Y_{t_k}ᵀ γ⁻¹_{X_{t_k}} [∫₀ᵘ I₁(u,v) dv] γ⁻¹_{X_{t_k}}
+        C(u,t_k) = Y_{t_k}ᵀ γ⁻¹_{X_{t_k}} [∫₀^{t_k} I₂(u,v) dv] γ⁻¹_{X_{t_k}}
+
+    Parameters
+    ----------
+    X0        : (n, 2)
+    T         : terminal time
+    n_steps   : Euler steps
+    gamma_reg : Tikhonov regularisation for γ inversion
+
+    Returns
+    -------
+    X_T : (n, 2)
+    H   : (n, 2)
+    """
+    n      = X0.shape[0]
+    d      = 2
+    device = X0.device
+    dtype  = X0.dtype
+    dt     = T / n_steps
+    sqrt_dt = math.sqrt(dt)
+
+    x = X0.clone()
+    Y = torch.eye(d, device=device, dtype=dtype).expand(n, d, d).clone()
+    # Z[i, a, b] = ∂²X_i / ∂x_a⁰ ∂x_b⁰ ; shape (n, d, d, d)
+    Z = torch.zeros(n, d, d, d, device=device, dtype=dtype)
+
+    X_list:  list = []
+    Y_list:  list = []
+    Z_list:  list = []
+    dW_list: list = []
+    g_list:  list = []
+
+    # ── Algorithm 4 forward pass ───────────────────────────────────────────
+    for k in range(n_steps):
+        t_mid = (k + 0.5) * dt
+        g     = sigma_t(t_mid, cfg)
+
+        X_list.append(x.clone())
+        Y_list.append(Y.clone())
+        Z_list.append(Z.clone())
+        g_list.append(g)
+
+        dW = sqrt_dt * torch.randn(n, d, device=device, dtype=dtype)
+        dW_list.append(dW)
+
+        # Euler step for X
+        x_new = x + drift_nl(x, t_mid, cfg) * dt + g * dW
+
+        # Euler step for Y: dY = J Y dt
+        J = jac_drift_nl(x, t_mid, cfg)                     # (n, d, d)
+        Y_new = Y + torch.bmm(J, Y) * dt
+
+        # Euler step for Z: dZ_{iab} = Σ_j h_j δ_{ij} Y_{ja} Y_{jb} dt + Σ_j J_{ij} Z_{jab} dt
+        # For diagonal J and diagonal hessian:
+        #   dZ_{iab} = h_i Y_{ia} Y_{ib} dt + J_{ii} Z_{iab} dt
+        h = hess_drift_nl(x, t_mid, cfg)                    # (n, d)  diagonal hessian
+        # h_i Y_{ia} Y_{ib}: einsum 'ni,nia,nib->niab'
+        hYY = h[:, :, None, None] * Y[:, :, :, None] * Y[:, :, None, :]   # (n, d, d, d)
+        # J_{ii} Z_{iab}: einsum 'nij,njab->niab' but J is diagonal so just diag*Z
+        JZ  = J.diagonal(dim1=1, dim2=2)[:, :, None, None] * Z             # (n, d, d, d)
+        Z_new = Z + (hYY + JZ) * dt
+
+        x, Y, Z = x_new, Y_new, Z_new
+
+    X_T = x
+    Y_T = Y        # (n, d, d)
+    Z_T = Z        # (n, d, d, d)
+
+    # ── Malliavin covariance γ (same as approx) ────────────────────────────
+    inv_Y_list: list = []
+    core = torch.zeros(n, d, d, device=device, dtype=dtype)
+    for Ys, g in zip(Y_list, g_list):
+        invYs = torch.linalg.inv(Ys)                        # (n, d, d)
+        inv_Y_list.append(invYs)
+        core += g**2 * torch.bmm(invYs, invYs.transpose(1, 2)) * dt
+
+    gamma     = torch.bmm(torch.bmm(Y_T, core), Y_T.transpose(1, 2))   # (n,d,d)
+    eye2      = torch.eye(d, device=device, dtype=dtype).expand(n, d, d)
+    gamma_inv = torch.linalg.inv(gamma + gamma_reg * eye2)              # (n,d,d)
+
+    # ── Algorithm 5 correction terms ──────────────────────────────────────
+    # Pre-compute W_s = g(s) Y_T inv(Y_s), shape (n,d,d)
+    W_list: list = []
+    for invYs, g in zip(inv_Y_list, g_list):
+        Ws = g * torch.bmm(Y_T, invYs)   # (n,d,d)
+        W_list.append(Ws)
+
+    # Pre-compute Ω(s) for each step s:
+    # Ω(s) = g(s) Z_T einv_s  −  g(s) Y_T einv_s Z_s einv_s
+    # where einv_s = inv(Y_s), shapes chosen so Ω(s) has shape (n, d, d, d)
+    # i.e. Ω_iab = g [ Z_T_{iaj} (inv_Ys)_{jb} − (Y_T inv_Ys)_{ij} Z_s_{jab} (inv_Ys ... wait
+    # From paper: Ω(t) is built from second-variation; let us keep (n,d,d,d) as:
+    # Omega[n, i, a, b] = Z_T[n,i,j,a] (inv_Ys)[n,j,b]  (contraction on j)
+    #                   − (Y_T inv_Ys)[n,i,j] Z_s[n,j,a,b]  (contraction on j)
+    # but g factor folds into W, so for I_1 and I_2 we need:
+    # I_1(s,v) = [Ω(s)(Y_s^{-1})^{-1}σ(s)] W_v^T + W_v [Ω(s)(Y_v^{-1})^{-1}σ(s)]^T
+    # This is complex; let us use a simpler factored form.
+    #
+    # Ω(t) contracted with g(t)(Y_t^{-1})^T gives a (n,d,d) matrix M_t:
+    # M_t = g(t) [ Z_T @ inv(Y_t) - Y_T @ inv(Y_t) @ Z_t @ inv(Y_t) ] @ inv(Y_t)^T @ σ
+    # For scalar σ=g this simplifies. We define:
+    # Phi_s = g(s)^2 [Z_T einv_s einv_s^T - Y_T einv_s Z_s einv_s einv_s^T]  (n,d,d,d)
+
+    # For I_1, I_2 we need (n,d,d) matrices at each pair (s,v).
+    # Let's define M(s) = g(s) Omega_contracted_s  shape (n,d,d,d) → contracted to (n,d,d)
+    # Actually from the paper lines 17-18:
+    # I_1(t,s) = [Omega(t)(Y_s^{(i)})^{-1} sigma(s)] W_s^T + W_s [...]^T
+    # The argument (Y_s^{(i)})^{-1} sigma(s) is g(s)*inv(Y_s) = (1/g)*W_s^T ... 
+    # Simplified: let P_s = g(s) einsum 'niab,nbj->niaj'(Z_T_partial, invYs) - Y_T einv_s Z_s_partial einv_s
+    # This gets complicated with arbitrary Omega definition. We implement directly:
+
+    # For each step u, we need A(u), B(u), C(u), each (n,d,d):
+    # A(u,t_k) = [σ(u) (Y_u^{-1})^T (Z_T - Z_u (Y_u^{-1})^T Y_T)] γ^{-1}
+    #   Note: σ(u)=g(u)*I so g(u)*(inv_Yu)^T @ (Z_T - Z_u @ inv_Yu^T @ Y_T) contracts to (n,d,d)
+    #   Z_T has shape (n,d,d,d), we need: for each (a,b) index of the output,
+    #   A[n,a,b] = g(u) Σ_i (inv_Yu^T)[n,a,i] (Z_T[n,i,:,b] - Z_u[n,i,:,:] @ (inv_Yu^T @ Y_T)[n,:,b])
+    #   Then multiply by gamma_inv: result (n,d,d) @ (n,d,d) -> (n,d,d)
+    # B(u,t_k) = Y_T^T gamma_inv [∫₀^u I_1(u,v) dv] gamma_inv  -> (n,d,d)
+    # C(u,t_k) = Y_T^T gamma_inv [∫₀^{t_k} I_2(u,v) dv] gamma_inv -> (n,d,d)
+
+    # For I_1(t,s): using Algorithm 5, line 17 with Omega(t)(Y_s)^{-1} sigma(s):
+    # Omega(t) as a map (n,d,d,d): Omega_iab = g(t) [Z_T_{iac} inv_Yt_{cb} - Y_T_{ij} inv_Yt_{jc} Z_t_{cab} inv_... ]
+    # This is messy. We implement Omega as (n,d,d,d) using einsum notation:
+
+    # Omega[n,i,a,b] = g(t) * (
+    #     sum_c Z_T[n,i,a,c] * inv_Yt[n,c,b]
+    #   - sum_j Y_T[n,i,j] * sum_c inv_Yt[n,j,c] * Z_t[n,c,a,b]  ← NOTE: this would be (n,d,d,d)
+    # )
+    # Then [Omega(t) (Y_s^{-1}) sigma(s)][n,i,a] = g(s) * sum_b Omega[n,i,a,b] * inv_Ys[n,b,?]
+    # But sigma(s)=g(s)*I, so sigma acts on last index: sum_b Omega[n,i,a,b]*g(s)*delta_{b,?}
+    # => Omega_contracted[n,i,a] = g(s) * Omega[n,i,a,:] summed appropriately...
+    # This is getting complex. We'll implement step-by-step below.
+
+    # Precompute for all steps: invYs, Ys, Zs, Ws
+    # Then loop u over all steps for S stochastic integral
+    # For A, B, C: loop u, and for B/C also need inner integral over v
+
+    YT_t = Y_T.transpose(1, 2)    # (n,d,d)  = Y_T^T
+
+    # Precompute running integrals needed for B and C
+    # int_I1_cumul[u] = ∫₀ᵘ I_1(u,v) dv  (but I_1 depends on u, so we can't precompute naively)
+    # Instead: for each u, compute integral over v=0..u of I_1(u,v)*dt
+    # I_1(t,s) = Omega_vec(t,s) W_s^T + W_s Omega_vec(t,s)^T  where Omega_vec shape (n,d,d)
+    # Omega_vec(t,s) = Omega(t) @ inv(Y_s) @ sigma(s) = [Omega(t) applied to g(s)*inv_Ys cols]
+    # Omega(t)[n,i,a,b] = g(t)*[Z_T[n,i,a,?]inv_Yt - Y_T inv_Yt Z_t[n,:,a,?]inv_Yt][?,b]
+    # Let's define cleanly:
+    # For each step t:
+    #   F_t[n,i,a,b] = sum_c Z_T[n,i,a,c] * inv_Yt[n,c,b]   (n,d,d,d)
+    #   G_t[n,i,a,b] = sum_j (Y_T inv_Yt)[n,i,j] * Z_t[n,j,a,b]  (n,d,d,d)
+    #   Omega_t = g_t * (F_t - G_t)   (n,d,d,d)
+    # Then Omega_vec(t,s)[n,i,a] = g_s * sum_b Omega_t[n,i,a,b] * inv_Ys[n,b,0]... 
+    # Wait: sigma(s) = g_s * I_{d×d}, so:
+    #   [Omega(t) * sigma(s)][n,i,a,c] = g_s * Omega_t[n,i,a,c]  (just scalar multiply)
+    # Then contract with inv_Ys: sum_c [Omega(t)*sigma(s)][n,i,a,c] * inv_Ys[n,c,j]
+    #   => g_s * sum_c Omega_t[n,i,a,c] * inv_Ys[n,c,j]  shape (n,d,d,d)
+    # But I_1(t,s) is (n,d,d), so we need to reduce the last (a,?) dims somehow.
+    # Looking at line 17 more carefully: I_1(t,s) = [Ω(t)(Y_s^{(i)})^{-1}σ(s)] W_s^T + W_s [...]^T
+    # The bracket [Ω(t)(Y_s^{(i)})^{-1}σ(s)] must be shape (n,d,d) for I_1 to be (n,d,d).
+    # So Ω(t) applied to (Y_s^{-1}σ(s)) — where (Y_s^{-1}σ(s)) is (n,d,d) — yields (n,d,d).
+    # Ω(t) must be a (n,d,d)→(n,d,d) linear map, i.e., (n,d,d,d) tensor contraction on last index:
+    # result[n,i,a] = sum_b Omega[n,i,a,b] * [inv_Ys sigma(s)][n,b,?]  — this gives (n,d,d) if we fix one output dim
+    # Actually: [Omega(t)(Y_s^{-1}sigma(s))][n,i,?] = sum_b sum_j Omega[n,i,b] (n,d,d treated as matrix) * (inv_Ys*g_s)[n,b,?]
+    # => Omega must be (n,d,d) → (n,d,d). So Omega is a (n,d,d) matrix times g_t... Let me reconsider.
+    # 
+    # From the paper (supplementary): Omega(t) = dW_t/dt (Malliavan derivative of W_t)
+    # W_t = g(t) Y_T Y_t^{-1}, so dW_t/dX_0 involves Z.
+    # Ω(t) as a (n,d,d) matrix (not 4th order): 
+    # Omega(t)[n,i,a] = g(t) [Z_T[n,i,:,a] - Y_T[n,i,:] @ inv_Yt[n,:,:] @ Z_t[n,:,:,a]] @ inv_Yt[n,:,?]
+    # This needs more careful reading. Given the complexity, we use a pragmatic dimension analysis:
+    # W_s shape (n,d,d). I_1(t,s) shape (n,d,d). So [Omega(t)(Y_s^{-1}sigma(s))] is (n,d,d).
+    # Let Omega(t) be a (n,d,d) matrix = dW_t/dt * dt ... 
+    # Simplest consistent definition: Omega_t = (n,d,d) where
+    # Omega_t = g_t * [Z_T_mat @ inv_Yt - Y_T @ inv_Yt @ Z_t_mat @ inv_Yt]
+    # where Z_mat collapses one index: Z_mat[n,i,b] = sum_a Z[n,i,a,b] ? No, Z is 3-index...
+    # 
+    # PRAGMATIC APPROACH: Since Z_{iab} is symmetric in (a,b) (for commuting partials) and the
+    # Hessian is diagonal (∂²b_i/∂x_j∂x_k = 0 for j≠k or k≠i), Z is diagonal:
+    # Z[n,i,a,b] ≠ 0 only when i=a=b.
+    # So Z can be stored as (n,d) with Z_diag[n,i] = Z[n,i,i,i].
+    # Under this diagonal structure, Omega(t) also simplifies to a (n,d,d) diagonal-ish matrix.
+    # We implement the diagonal-Z version directly.
+
+    # Since J is diagonal (J[n,i,j]=0 for i≠j) and H_xx is diagonal,
+    # the Z update dZ_{iab}/dt = h_i Y_{ia} Y_{ib} + J_{ii} Z_{iab}
+    # means Z_{iab} is only nonzero when i=a=b (all mixed terms start at 0 and remain 0).
+    # Let z_diag[n,i] = Z[n,i,i,i] (the only nonzero element per slice i).
+
+    # Recompute z_diag for all stored Z_list
+    # Z_list stores full (n,d,d,d) tensors from the forward pass; extract diagonal
+    z_diag_list = []
+    for Zs in Z_list:
+        # Z[n,i,i,i] for i in {0,1}
+        z_d = torch.stack([Zs[:, i, i, i] for i in range(d)], dim=1)   # (n,d)
+        z_diag_list.append(z_d)
+    z_diag_T = torch.stack([Z_T[:, i, i, i] for i in range(d)], dim=1)  # (n,d)
+
+    # Similarly Y and inv_Y are diagonal for diagonal J (starting from I):
+    # Y[n,i,j]=0 for i≠j, Y[n,i,i] = product of exp(int J_{ii} dt)
+    # Store y_diag = Y diagonals, inv_y_diag = inv_Y diagonals
+    y_diag_list   = [torch.stack([Ys[:, i, i] for i in range(d)], dim=1) for Ys in Y_list]
+    inv_y_diag_list = [torch.stack([invYs[:, i, i] for i in range(d)], dim=1) for invYs in inv_Y_list]
+    y_diag_T      = torch.stack([Y_T[:, i, i] for i in range(d)], dim=1)   # (n,d)
+    inv_y_diag_T  = torch.linalg.inv(Y_T).diagonal(dim1=1, dim2=2)         # (n,d)
+
+    # Under diagonal structure, gamma is also diagonal:
+    # gamma[n,i,i] = Y_T[n,i,i]^2 * sum_s inv_Ys[n,i,i]^2 * g_s^2 * dt
+    # gamma_inv[n,i,i] = 1 / (gamma[n,i,i] + gamma_reg)
+    gamma_inv_diag = gamma_inv.diagonal(dim1=1, dim2=2)  # (n,d)
+
+    # W_s[n,i,i] = g_s * y_diag_T[n,i] * inv_y_diag_s[n,i]
+    w_diag_list = [g * y_diag_T * inv_y_diag_s for g, inv_y_diag_s in zip(g_list, inv_y_diag_list)]
+    # (n,d) each
+
+    # Omega_t[n,i] (diagonal, shape (n,d)):
+    # Omega_t[n,i] = g_t * (z_diag_T[n,i] * inv_y_diag_t[n,i]
+    #                      - y_diag_T[n,i] * inv_y_diag_t[n,i] * z_diag_t[n,i] * inv_y_diag_t[n,i])
+    # = g_t * inv_y_diag_t[n,i] * (z_diag_T[n,i] - y_diag_T[n,i] * inv_y_diag_t[n,i] * z_diag_t[n,i])
+    omega_diag_list = []
+    for g, inv_y_diag_s, z_diag_s in zip(g_list, inv_y_diag_list, z_diag_list):
+        w_s   = g * y_diag_T * inv_y_diag_s          # (n,d)
+        # Omega_s[i] = g * inv_ys[i] * (z_T[i] - y_T[i]*inv_ys[i]*z_s[i])
+        omega = g * inv_y_diag_s * (z_diag_T - w_s * inv_y_diag_s * z_diag_s)  # (n,d)
+        omega_diag_list.append(omega)
+
+    # Theta(t,s) = Omega(t)(Y_s^{-1})sigma(s) W_s^T + ... complex; for diagonal:
+    # Theta_ts[n,i] = omega_t[n,i] * g_s * inv_ys[n,i]  (diagonal element)
+    # => I_1(t,s)[n,i] = 2 * omega_t[n,i] * g_s * inv_ys[n,i] * w_s[n,i]  (diagonal, multiply)
+    # => I_2(t,s)[n,i] = 2 * theta_ts[n,i] * w_s[n,i]
+    # For diagonal matrices, matrix products reduce to element-wise products.
+    # I_1(t,s) = Omega_vec(t,s) W_s^T + W_s Omega_vec(t,s)^T  where Omega_vec = Omega(t)*g_s*inv_ys
+    # diagonal: 2 * omega_t * g_s * inv_ys * w_s  (already symmetric for diagonal case)
+
+    # ── Stochastic term S ─────────────────────────────────────────────────
+    # S[n,i] = gamma_inv[n,i] * y_diag_T[n,i] * sum_u (g_u * inv_y_diag_u[n,i] * dW_u[n,i])
+    stoch_sum = torch.zeros(n, d, device=device, dtype=dtype)
+    for inv_y_d, g, dW in zip(inv_y_diag_list, g_list, dW_list):
+        stoch_sum += g * inv_y_d * dW   # (n,d)
+
+    S = gamma_inv_diag * y_diag_T * stoch_sum   # (n,d)
+
+    # ── Correction terms A, B, C and deterministic term D ─────────────────
+    # D[n,i] = sum_u g_u * inv_y_diag_u[n,i] * (A-B-C)(u, t_k)[n,i] * dt
+    # A(u,t_k)[n,i] = g_u * inv_y_diag_u[n,i] * (z_diag_T[n,i] - z_diag_u[n,i]*inv_y_diag_u[n,i]*y_diag_T[n,i]) * gamma_inv_diag[n,i]
+    # B(u,t_k)[n,i] = y_diag_T[n,i] * gamma_inv_diag[n,i] * cumI1_u[n,i] * gamma_inv_diag[n,i]
+    # C(u,t_k)[n,i] = y_diag_T[n,i] * gamma_inv_diag[n,i] * totalI2_u[n,i] * gamma_inv_diag[n,i]
+
+    # Precompute total integral of I_2 over [0, t_k] (doesn't depend on u):
+    # I_2(t,s)[n,i] = 2 * omega_diag_t * g_s * inv_ys * w_s  (diagonal)
+    # total_I2_u = sum_{s=0}^{t_k} I_2(u,s) * dt = 2 * omega_diag_u * (sum_s g_s * inv_ys * w_s * dt)
+    # where sum_s g_s * inv_ys * w_s = sum_s g_s^2 * inv_ys^2 * y_diag_T = y_diag_T * core_diag
+    core_diag = gamma_inv_diag * 0.0  # will accumulate
+    core_diag = torch.zeros(n, d, device=device, dtype=dtype)
+    for inv_y_d, g in zip(inv_y_diag_list, g_list):
+        core_diag += g**2 * inv_y_d**2 * dt  # (n,d)
+    # total I_2 over all s for a given u: 2 * omega_diag_u * y_diag_T * core_diag
+    # => total_I2(u) = 2 * omega_u * y_diag_T * core_diag
+
+    D = torch.zeros(n, d, device=device, dtype=dtype)
+    cumI1 = torch.zeros(n, d, device=device, dtype=dtype)
+
+    for step_u, (inv_y_d, g, z_d, omega_d, w_d) in enumerate(
+        zip(inv_y_diag_list, g_list, z_diag_list, omega_diag_list, w_diag_list)
+    ):
+        # A(u) diagonal
+        A_u = g * inv_y_d * (z_diag_T - z_d * inv_y_d * y_diag_T) * gamma_inv_diag   # (n,d)
+
+        # B(u): uses cumI1 accumulated up to u
+        B_u = y_diag_T * gamma_inv_diag * cumI1 * gamma_inv_diag   # (n,d)
+
+        # C(u): total I_2 integral over [0,T]
+        total_I2 = 2.0 * omega_d * y_diag_T * core_diag              # (n,d)
+        C_u = y_diag_T * gamma_inv_diag * total_I2 * gamma_inv_diag  # (n,d)
+
+        # D contribution: g_u * inv_y_u * (A-B-C) * dt
+        D += g * inv_y_d * (A_u - B_u - C_u) * dt
+
+        # Update cumI1 for next step: I_1(u,v) at v=u: 2 * omega_u * w_u
+        I1_uu = 2.0 * omega_d * w_d    # (n,d)
+        cumI1 = cumI1 + I1_uu * dt
+
+    # ── Assemble δ and H ─────────────────────────────────────────────────
+    delta = S - D
+    H     = -delta
+    return X_T, H
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Dispatcher
+# ──────────────────────────────────────────────────────────────────────────────
+
+def simulate_malliavin_nl(
+    X0: torch.Tensor,
+    T: float,
+    cfg: NonlinearSDEConfig,
+    n_steps: int = 250,
+    gamma_reg: float = 1e-3,
+    correction: str = "approx",
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Dispatch to approximate or full Malliavin weight computation.
+
+    Parameters
+    ----------
+    correction : "approx" (default) or "mirafzali_full"
+    """
+    if correction == "approx":
+        return simulate_malliavin_nl_approx(X0, T, cfg, n_steps, gamma_reg)
+    elif correction == "mirafzali_full":
+        return simulate_malliavin_nl_mirafzali_full(X0, T, cfg, n_steps, gamma_reg)
+    else:
+        raise ValueError(f"Unknown correction={correction!r}; expected 'approx' or 'mirafzali_full'")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 
 @torch.no_grad()
