@@ -1,0 +1,2 @@
+seed,config_key,method,mmd_rbf,sliced_wasserstein,nan_rate,elapsed_seconds,var_H,var_residual,mean_residual_norm
+0,full_big_forward_init,mirafzali,0.0043184757232666016,1.5786814816482735,0.0,1100.47,,,
