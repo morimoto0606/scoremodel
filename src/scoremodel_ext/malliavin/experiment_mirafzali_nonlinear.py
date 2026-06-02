@@ -883,7 +883,6 @@ def run_residual_multiseed_eval(
         n_steps_per_unit=n_steps_per_unit,
         gamma_reg=gamma_reg,
         weight_decay=weight_decay,
-        reverse_init=reverse_init,
         device=device,
         mirafzali_mode=mirafzali_mode,
     )
@@ -893,8 +892,13 @@ def run_residual_multiseed_eval(
     for seed in seeds:
         for cfg_entry in configs:
             cfg_entry = dict(cfg_entry)          # copy so we can pop
-            config_key = cfg_entry.pop("_key")
+            config_key = (
+                cfg_entry.pop("_key")
+                if "_key" in cfg_entry
+                else cfg_entry.pop("config_key")
+            )
             config_correction = cfg_entry.pop("correction", correction)
+            config_reverse_init = cfg_entry.pop("reverse_init", reverse_init)
             method      = cfg_entry["method"]
 
             run_outdir = outdir_ds / f"seed{seed}" / config_key
@@ -909,6 +913,7 @@ def run_residual_multiseed_eval(
                 **_shared,
                 **cfg_entry,
                 correction=config_correction,
+                reverse_init=config_reverse_init,
                 seed=seed,
                 _outdir_override=str(run_outdir),
             )
@@ -941,7 +946,11 @@ def run_residual_multiseed_eval(
     summary_rows: list = []
     for cfg_entry in configs:
         cfg_entry = dict(cfg_entry)
-        config_key = cfg_entry.pop("_key")
+        config_key = (
+            cfg_entry.pop("_key")
+            if "_key" in cfg_entry
+            else cfg_entry.pop("config_key")
+        )
         config_correction = cfg_entry.pop("correction", correction)
         method      = cfg_entry.get("method", "")
         sub = raw_df[raw_df["config_key"] == config_key]
@@ -977,14 +986,17 @@ def run_residual_multiseed_eval(
         {k: v for k, v in (list(configs[0].items()) if hasattr(configs[0], "items") else [])}
     # Find baseline config_key (first entry)
     _first = dict(configs[0])
-    baseline_cfg_key = _first.pop("_key")
+    baseline_cfg_key = _first.pop("_key") if "_key" in _first else _first.pop("config_key")
     baseline_sub = raw_df[raw_df["config_key"] == baseline_cfg_key].sort_values("seed")
 
     paired_tests: dict = {}
     for cfg_entry in configs[1:]:
         cfg_entry  = dict(cfg_entry)
-        config_key = cfg_entry.pop("_key")
-        config_correction = cfg_entry.pop("correction", correction)
+        config_key = (
+            cfg_entry.pop("_key")
+            if "_key" in cfg_entry
+            else cfg_entry.pop("config_key")
+        )
         sub = raw_df[raw_df["config_key"] == config_key].sort_values("seed")
 
         # Align on seeds present in both
