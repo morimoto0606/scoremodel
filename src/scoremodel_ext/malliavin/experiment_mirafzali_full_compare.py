@@ -27,8 +27,8 @@ run_residual_multiseed_eval(
             "n_steps_rev": 1000,
         },
     ],
-    times=[0.005, 0.01, 0.02, 0.035, 0.05, 0.075, 0.10, 0.20, 0.35, 0.50, 0.75, 1.00,]
-    reverse_init="stationary"
+    times=[0.005, 0.01, 0.02, 0.035, 0.05, 0.075, 0.10, 0.20, 0.35, 0.50, 0.75, 1.00,],
+    reverse_init="stationary",
     hidden=2048,
     n_blocks=6,
     n_paths=25000,
