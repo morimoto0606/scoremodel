@@ -24,9 +24,10 @@ run_residual_multiseed_eval(
             "_key": "full_big_forward_init",
             "method": "mirafzali",
             "correction": "mirafzali_full",
-            "reverse_init": "forward",
         },
     ],
+
+    reverse_init= "forward",
     hidden=2048,
     n_blocks=6,
     n_paths=25000,
