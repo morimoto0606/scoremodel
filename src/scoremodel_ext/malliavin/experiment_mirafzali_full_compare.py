@@ -24,6 +24,7 @@ run_residual_multiseed_eval(
             "_key": "full_big_forward_init",
             "method": "mirafzali",
             "correction": "mirafzali_full",
+            "n_steps_rev": 1000,
         },
     ],
 
@@ -35,6 +36,5 @@ run_residual_multiseed_eval(
     batch_size=4096,
     lr=2e-4,
     n_steps_per_unit=250,
-    n_steps_rev=1000,
     outbase="results/mirafzali_full_swissroll_big_forward_init_rev1000_1seed",
 )
