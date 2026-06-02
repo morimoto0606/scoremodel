@@ -1,0 +1,2 @@
+config_key,method,correction,n_seeds,mmd_mean,mmd_std,sw_mean,sw_std,nan_rate_mean,mean_runtime
+full_big_forward_init,mirafzali,mirafzali_full,1,0.003653913736343384,,1.5924161828693588,,0.0,1148.23
