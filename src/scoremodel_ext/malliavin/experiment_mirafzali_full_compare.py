@@ -27,7 +27,7 @@ run_residual_multiseed_eval(
         },
     ],
 
-    reverse_init= "forward",
+    reverse_init= "forward_terminal",
     hidden=2048,
     n_blocks=6,
     n_paths=25000,

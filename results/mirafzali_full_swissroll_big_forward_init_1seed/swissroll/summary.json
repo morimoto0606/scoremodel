@@ -1,0 +1,14 @@
+[
+  {
+    "config_key": "full_big_forward_init",
+    "method": "mirafzali",
+    "correction": "mirafzali_full",
+    "n_seeds": 1,
+    "mmd_mean": 0.0029019415378570557,
+    "mmd_std": null,
+    "sw_mean": 1.6045068786895536,
+    "sw_std": null,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 884.07
+  }
+]
