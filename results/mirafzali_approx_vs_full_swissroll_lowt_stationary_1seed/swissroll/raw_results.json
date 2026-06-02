@@ -1,0 +1,38 @@
+[
+  {
+    "seed": 0,
+    "config_key": "approx_lowt_stationary",
+    "method": "mirafzali",
+    "mmd_rbf": -0.00014394521713256836,
+    "sliced_wasserstein": 1.711978295757102,
+    "nan_rate": 0.0,
+    "elapsed_seconds": 1104.08,
+    "var_H": null,
+    "var_residual": null,
+    "mean_residual_norm": null
+  },
+  {
+    "seed": 0,
+    "config_key": "a_correction_lowt_stationary",
+    "method": "mirafzali",
+    "mmd_rbf": 0.0007835924625396729,
+    "sliced_wasserstein": 1.7348165851777606,
+    "nan_rate": 0.0,
+    "elapsed_seconds": 1112.93,
+    "var_H": null,
+    "var_residual": null,
+    "mean_residual_norm": null
+  },
+  {
+    "seed": 0,
+    "config_key": "full_lowt_stationary",
+    "method": "mirafzali",
+    "mmd_rbf": 0.0032931268215179443,
+    "sliced_wasserstein": 1.6051283412893855,
+    "nan_rate": 0.0,
+    "elapsed_seconds": 1114.92,
+    "var_H": null,
+    "var_residual": null,
+    "mean_residual_norm": null
+  }
+]

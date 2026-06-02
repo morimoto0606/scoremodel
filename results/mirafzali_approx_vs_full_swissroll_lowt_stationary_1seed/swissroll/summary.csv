@@ -1,0 +1,4 @@
+config_key,method,correction,n_seeds,mmd_mean,mmd_std,sw_mean,sw_std,nan_rate_mean,mean_runtime
+approx_lowt_stationary,mirafzali,approx,1,-0.00014394521713256836,,1.711978295757102,,0.0,1104.08
+a_correction_lowt_stationary,mirafzali,a_correction,1,0.0007835924625396729,,1.7348165851777606,,0.0,1112.93
+full_lowt_stationary,mirafzali,mirafzali_full,1,0.0032931268215179443,,1.6051283412893855,,0.0,1114.92

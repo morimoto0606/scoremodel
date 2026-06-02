@@ -1,0 +1,4 @@
+seed,config_key,method,mmd_rbf,sliced_wasserstein,nan_rate,elapsed_seconds,var_H,var_residual,mean_residual_norm
+0,approx_lowt_stationary,mirafzali,-0.00014394521713256836,1.711978295757102,0.0,1104.08,,,
+0,a_correction_lowt_stationary,mirafzali,0.0007835924625396729,1.7348165851777606,0.0,1112.93,,,
+0,full_lowt_stationary,mirafzali,0.0032931268215179443,1.6051283412893855,0.0,1114.92,,,
