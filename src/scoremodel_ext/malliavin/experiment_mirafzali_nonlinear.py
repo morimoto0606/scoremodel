@@ -125,6 +125,7 @@ def run_experiment_nl(
     nw_bandwidth_scale: float = 1.0,
     residual_knn_k: int = 256,
     residual_knn_bandwidth_scale: float = 1.0,
+    n_steps_rev: Optional[int] = None,
     # ── internal: skip simulation (sweep reuse) ─────────────────────────
     _sim_cache: Optional[list] = None,
     _outdir_override: Optional[str] = None,
@@ -153,7 +154,9 @@ def run_experiment_nl(
         n_epochs = 2500
         batch_size = 2048
         lr = 3e-4
-        n_steps_rev = 250
+
+    # Resolve the number of reverse-sampling steps; 250 is the default fallback.
+    _n_steps_rev: int = n_steps_rev if n_steps_rev is not None else 250
 
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -299,7 +302,6 @@ def run_experiment_nl(
     # The old "forward_terminal" option is a reconstruction / consistency test:
     #   X0 ~ data -> forward -> X_T -> reverse -> X0.
     sampler = get_sampler(dataset)
-    n_steps_rev = 250
 
     if reverse_init == "stationary":
         X_T_start = sample_stationary_nl(
@@ -316,7 +318,7 @@ def run_experiment_nl(
             X0_rev,
             cfg.T,
             cfg,
-            n_steps=n_steps_rev,
+            n_steps=_n_steps_rev,
         )
     else:
         raise ValueError(
@@ -324,7 +326,7 @@ def run_experiment_nl(
             "Use 'stationary' or 'forward_terminal'."
         )
 
-    samples = reverse_euler_nl(model, X_T_start, cfg, n_steps=n_steps_rev)
+    samples = reverse_euler_nl(model, X_T_start, cfg, n_steps=_n_steps_rev)
 
     nan_mask = torch.isnan(samples).any(dim=1)
     nan_rate = float(nan_mask.float().mean().item())

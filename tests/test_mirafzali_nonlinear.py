@@ -43,6 +43,7 @@ from scoremodel_ext.malliavin.experiment_mirafzali_nonlinear import (
     ResidualCorrectionModel,
     run_residual_sweep,
     run_residual_multiseed_eval,
+    run_experiment_nl,
     DEFAULT_NL_CFG,
     _n_steps_for,
     _binned_score_at_points,
@@ -1469,3 +1470,33 @@ class TestResidualMultiseedEval:
         assert summary_keys == expected_keys, (
             f"summary keys mismatch: {summary_keys} != {expected_keys}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# n_steps_rev configurability
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNStepsRevConfigurable:
+    def test_run_experiment_nl_n_steps_rev(self, tmp_path):
+        """n_steps_rev=5 should complete and write metrics.json."""
+        metrics = run_experiment_nl(
+            dataset="swissroll",
+            method="mirafzali",
+            cfg=_MINI_CFG,
+            times=[0.5, 1.0],
+            n_paths=64,
+            n_epochs=1,
+            batch_size=32,
+            n_steps_per_unit=5,
+            hidden=32,
+            n_blocks=1,
+            num_frequencies=4,
+            n_samples_reverse=64,
+            n_steps_rev=5,
+            outbase=str(tmp_path / "out"),
+            device="cpu",
+            mirafzali_mode=False,
+        )
+        assert isinstance(metrics, dict)
+        metrics_path = tmp_path / "out" / "swissroll" / "mirafzali" / "metrics.json"
+        assert metrics_path.exists(), f"metrics.json not found at {metrics_path}"
