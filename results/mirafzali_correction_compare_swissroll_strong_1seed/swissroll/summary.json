@@ -1,0 +1,26 @@
+[
+  {
+    "config_key": "approx_strong",
+    "method": "mirafzali",
+    "correction": "approx",
+    "n_seeds": 1,
+    "mmd_mean": 0.0006750226020812988,
+    "mmd_std": null,
+    "sw_mean": 7.951937604471636,
+    "sw_std": null,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 62.22
+  },
+  {
+    "config_key": "full_strong",
+    "method": "mirafzali",
+    "correction": "mirafzali_full",
+    "n_seeds": 1,
+    "mmd_mean": 0.0013997256755828857,
+    "mmd_std": null,
+    "sw_mean": 1.6100396985862053,
+    "sw_std": null,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 63.6
+  }
+]

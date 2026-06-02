@@ -1,0 +1,14 @@
+[
+  {
+    "seed": 0,
+    "config_key": "full_big",
+    "method": "mirafzali",
+    "mmd_rbf": 0.0019300580024719238,
+    "sliced_wasserstein": 1.6301851550967479,
+    "nan_rate": 0.0,
+    "elapsed_seconds": 884.33,
+    "var_H": null,
+    "var_residual": null,
+    "mean_residual_norm": null
+  }
+]

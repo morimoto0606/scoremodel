@@ -1,0 +1,18 @@
+{
+  "a_correction": {
+    "n_paired_seeds": 3,
+    "mean_relative_mmd_improvement": -0.03452924368663427,
+    "mean_relative_sw_improvement": -0.0493578030716993,
+    "mmd_ttest_pvalue": 0.05712699139838677,
+    "sw_ttest_pvalue": 0.0015809450984846107,
+    "scipy_available": true
+  },
+  "mirafzali_full": {
+    "n_paired_seeds": 3,
+    "mean_relative_mmd_improvement": -0.2539539237752492,
+    "mean_relative_sw_improvement": 0.12208214831427378,
+    "mmd_ttest_pvalue": 0.03368319087892982,
+    "sw_ttest_pvalue": 0.0004238861493171955,
+    "scipy_available": true
+  }
+}

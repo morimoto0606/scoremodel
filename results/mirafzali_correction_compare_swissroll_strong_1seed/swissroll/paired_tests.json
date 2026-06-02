@@ -1,0 +1,10 @@
+{
+  "full_strong": {
+    "n_paired_seeds": 1,
+    "mean_relative_mmd_improvement": -1.073598233995585,
+    "mean_relative_sw_improvement": 0.7975286302949828,
+    "mmd_ttest_pvalue": null,
+    "sw_ttest_pvalue": null,
+    "scipy_available": true
+  }
+}

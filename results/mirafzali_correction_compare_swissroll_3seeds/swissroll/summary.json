@@ -1,0 +1,38 @@
+[
+  {
+    "config_key": "approx",
+    "method": "mirafzali",
+    "correction": "approx",
+    "n_seeds": 3,
+    "mmd_mean": 0.03693706293900808,
+    "mmd_std": 0.0006342311725711352,
+    "sw_mean": 1.7455752117234302,
+    "sw_std": 0.016279799214296436,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 8.88
+  },
+  {
+    "config_key": "a_correction",
+    "method": "mirafzali",
+    "correction": "a_correction",
+    "n_seeds": 3,
+    "mmd_mean": 0.03821302453676859,
+    "mmd_std": 0.000895957426382183,
+    "sw_mean": 1.8317120005936107,
+    "sw_std": 0.014700342130871829,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 8.333333333333334
+  },
+  {
+    "config_key": "mirafzali_full",
+    "method": "mirafzali",
+    "correction": "mirafzali_full",
+    "n_seeds": 3,
+    "mmd_mean": 0.046283269921938576,
+    "mmd_std": 0.002472916503391744,
+    "sw_mean": 1.532443047804848,
+    "sw_std": 0.01045773000309691,
+    "nan_rate_mean": 0.0,
+    "mean_runtime": 8.25
+  }
+]

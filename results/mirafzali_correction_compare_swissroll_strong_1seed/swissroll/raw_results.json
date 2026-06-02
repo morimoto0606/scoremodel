@@ -1,0 +1,26 @@
+[
+  {
+    "seed": 0,
+    "config_key": "approx_strong",
+    "method": "mirafzali",
+    "mmd_rbf": 0.0006750226020812988,
+    "sliced_wasserstein": 7.951937604471636,
+    "nan_rate": 0.0,
+    "elapsed_seconds": 62.22,
+    "var_H": null,
+    "var_residual": null,
+    "mean_residual_norm": null
+  },
+  {
+    "seed": 0,
+    "config_key": "full_strong",
+    "method": "mirafzali",
+    "mmd_rbf": 0.0013997256755828857,
+    "sliced_wasserstein": 1.6100396985862053,
+    "nan_rate": 0.0,
+    "elapsed_seconds": 63.6,
+    "var_H": null,
+    "var_residual": null,
+    "mean_residual_norm": null
+  }
+]
