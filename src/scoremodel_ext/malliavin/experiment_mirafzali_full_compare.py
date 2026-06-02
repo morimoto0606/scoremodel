@@ -27,7 +27,7 @@ run_residual_multiseed_eval(
             "n_steps_rev": 1000,
         },
     ],
-    times=[0.005, 0.01, 0.02, 0.035, 0.05, 0.075, 0.10, 0.20, 0.35, 0.50, 0.75, 1.00],
+    times=[i/100 for i in range(1,101)],
     reverse_init="forward_terminal",
     hidden=2048,
     n_blocks=6,
@@ -36,5 +36,5 @@ run_residual_multiseed_eval(
     batch_size=4096,
     lr=2e-4,
     n_steps_per_unit=250,
-    outbase="results/mirafzali_full_swissroll_big_forward_init_lowt_rev1000_1seed",
+    outbase="results/mirafzali_full_swissroll_big_forward_init_100times_rev1000_1seed",
 )
