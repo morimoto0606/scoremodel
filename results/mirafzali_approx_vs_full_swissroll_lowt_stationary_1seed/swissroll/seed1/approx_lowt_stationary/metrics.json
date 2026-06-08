@@ -1,0 +1,21 @@
+{
+  "nan_rate": 0.0,
+  "n_samples": 20000,
+  "mmd_rbf": -0.0001914501190185547,
+  "sliced_wasserstein": 1.7029844685880269,
+  "reverse_init": "stationary",
+  "correction": "approx",
+  "n_paths": 25000,
+  "n_epochs": 5000,
+  "batch_size": 4096,
+  "n_steps_per_unit": 250,
+  "n_steps_rev": 1000,
+  "n_times": 12,
+  "sim_seconds": 3.0848970878869295,
+  "teacher_seconds": 0.09173526428639889,
+  "forward_seconds": 3.1766323521733284,
+  "train_seconds": 829.4282071013004,
+  "reverse_seconds": 298.2464642506093,
+  "eval_seconds": 0.9057633075863123,
+  "total_seconds": 1132.6484932843596
+}

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 
@@ -205,7 +205,11 @@ def simulate_malliavin_nl(
     n_steps: int = 250,
     gamma_reg: float = 1e-3,
     correction: str = "approx",
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    return_diagnostics: bool = False,
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, Dict[str, float]],
+]:
     """
     Dispatch to the requested nonlinear Malliavin-weight implementation.
 
@@ -219,15 +223,35 @@ def simulate_malliavin_nl(
     """
     if correction == "approx":
         return simulate_malliavin_nl_approx(
-            X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
+            X0,
+            T,
+            cfg,
+            n_steps=n_steps,
+            gamma_reg=gamma_reg,
+            return_diagnostics=return_diagnostics,
         )
     if correction == "a_correction":
-        return _simulate_malliavin_nl_a_correction(
+        out = _simulate_malliavin_nl_a_correction(
             X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
         )
+        if not return_diagnostics:
+            return out
+        X_T, H = out
+        h_norm = torch.linalg.norm(H, dim=1)
+        diagnostics = {
+            "var_H": float(H.var(unbiased=False).item()),
+            "mean_H_norm": float(h_norm.mean().item()),
+            "var_H_norm": float(h_norm.var(unbiased=False).item()),
+        }
+        return X_T, H, diagnostics
     if correction == "mirafzali_full":
         return simulate_malliavin_nl_mirafzali_full(
-            X0, T, cfg, n_steps=n_steps, gamma_reg=gamma_reg
+            X0,
+            T,
+            cfg,
+            n_steps=n_steps,
+            gamma_reg=gamma_reg,
+            return_diagnostics=return_diagnostics,
         )
     raise ValueError(
         f"Unknown correction={correction!r}; expected 'approx', 'a_correction', or 'mirafzali_full'"
@@ -378,7 +402,11 @@ def simulate_malliavin_nl_approx(
     cfg: NonlinearSDEConfig,
     n_steps: int = 250,
     gamma_reg: float = 1e-3,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    return_diagnostics: bool = False,
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, Dict[str, float]],
+]:
     """
     Euler–Maruyama forward simulation with the Itô–Malliavin score weight.
 
@@ -461,7 +489,16 @@ def simulate_malliavin_nl_approx(
         delta += torch.bmm(U.transpose(1, 2), dW[:, :, None]).squeeze(-1)
 
     H = -delta
-    return X_T, H
+    if not return_diagnostics:
+        return X_T, H
+
+    h_norm = torch.linalg.norm(H, dim=1)
+    diagnostics = {
+        "var_H": float(H.var(unbiased=False).item()),
+        "mean_H_norm": float(h_norm.mean().item()),
+        "var_H_norm": float(h_norm.var(unbiased=False).item()),
+    }
+    return X_T, H, diagnostics
 
 
 # Backwards compatibility: older tests and experiments imported the leading-
@@ -480,7 +517,11 @@ def simulate_malliavin_nl_mirafzali_full(
     cfg: NonlinearSDEConfig,
     n_steps: int = 250,
     gamma_reg: float = 1e-3,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    return_diagnostics: bool = False,
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor],
+    Tuple[torch.Tensor, torch.Tensor, Dict[str, float]],
+]:
     """
     Diagonal specialized implementation attempt for Algorithm 4 + 5.
 
@@ -777,6 +818,10 @@ def simulate_malliavin_nl_mirafzali_full(
     q_total = q_prefix
 
     D = torch.zeros(n, d, device=device, dtype=dtype)
+    mean_A2_sum = 0.0
+    mean_B2_sum = 0.0
+    mean_C2_sum = 0.0
+    n_abc = 0
 
     for inv_y_d, g, z_d, omega_d, q_prefix_u in zip(
         inv_y_diag_list, g_list, z_diag_list, omega_diag_list, q_prefix_list
@@ -792,13 +837,34 @@ def simulate_malliavin_nl_mirafzali_full(
         int_I2_u = 2.0 * omega_d * q_total
         C_u = y_diag_T * gamma_inv_diag * int_I2_u * gamma_inv_diag
 
+        mean_A2_sum += float((A_u * A_u).mean().item())
+        mean_B2_sum += float((B_u * B_u).mean().item())
+        mean_C2_sum += float((C_u * C_u).mean().item())
+        n_abc += 1
+
         # D_i = ∫ g(u)/y_i(u) [A_i(u) - B_i(u) - C_i(u)] du.
         D += g * inv_y_d * (A_u - B_u - C_u) * dt
 
     # ── Assemble δ and H ─────────────────────────────────────────────────
     delta = S - D
     H     = -delta
-    return X_T, H
+    if not return_diagnostics:
+        return X_T, H
+
+    h_norm = torch.linalg.norm(H, dim=1)
+    denom = max(n_abc, 1)
+    diagnostics = {
+        "var_S": float(S.var(unbiased=False).item()),
+        "var_D": float(D.var(unbiased=False).item()),
+        "var_delta": float(delta.var(unbiased=False).item()),
+        "var_H": float(H.var(unbiased=False).item()),
+        "mean_H_norm": float(h_norm.mean().item()),
+        "var_H_norm": float(h_norm.var(unbiased=False).item()),
+        "mean_A2": float(mean_A2_sum / denom),
+        "mean_B2": float(mean_B2_sum / denom),
+        "mean_C2": float(mean_C2_sum / denom),
+    }
+    return X_T, H, diagnostics
 
 
 

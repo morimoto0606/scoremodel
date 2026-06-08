@@ -1,0 +1,2 @@
+config_key,sde_type,dataset,n_seeds,mmd_mean,mmd_std,sw_mean,sw_std,nan_rate_mean,var_H_mean,mean_H_norm_mean,var_H_norm_mean,sim_seconds_mean,train_seconds_mean,reverse_seconds_mean,total_seconds_mean
+linear_vp,linear_vp,swissroll,1,-0.00039380788803100586,,1.678480571205711,,0.0,0.9972958564758301,1.2517411708831787,0.42779073119163513,0.290360264480114,800.5672210752964,293.6568203680217,1096.4453185703605

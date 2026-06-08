@@ -18,7 +18,7 @@ from scoremodel_ext.malliavin.experiment_mirafzali_nonlinear import run_residual
 
 run_residual_multiseed_eval(
     dataset="swissroll",
-    seeds=[0],
+    seeds=[0,1,2,3,4],
     configs=[
         {
             "_key": "approx_lowt_stationary",
@@ -52,5 +52,5 @@ run_residual_multiseed_eval(
     batch_size=4096,
     lr=2e-4,
     n_steps_per_unit=250,
-    outbase="results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed",
+    outbase="results/mirafzali_variance_diag_5seed",
 )

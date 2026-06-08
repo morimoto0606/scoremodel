@@ -3,5 +3,19 @@
   "n_samples": 20000,
   "mmd_rbf": 0.0007835924625396729,
   "sliced_wasserstein": 1.7348165851777606,
-  "reverse_init": "stationary"
+  "reverse_init": "stationary",
+  "correction": "a_correction",
+  "n_paths": 25000,
+  "n_epochs": 5000,
+  "batch_size": 4096,
+  "n_steps_per_unit": 250,
+  "n_steps_rev": 1000,
+  "n_times": 12,
+  "sim_seconds": 2.8978593852370977,
+  "teacher_seconds": 0.002690175548195839,
+  "forward_seconds": 2.9005495607852936,
+  "train_seconds": 827.1983676031232,
+  "reverse_seconds": 298.15076582320035,
+  "eval_seconds": 0.9204411283135414,
+  "total_seconds": 1131.1615810040385
 }

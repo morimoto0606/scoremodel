@@ -1,0 +1,2 @@
+seed,config_key,sde_type,mmd_rbf,sliced_wasserstein,nan_rate,var_H,mean_H_norm,var_H_norm,sim_seconds,train_seconds,reverse_seconds,total_seconds
+0,linear_vp,linear_vp,-0.00039380788803100586,1.678480571205711,0.0,0.9972958564758301,1.2517411708831787,0.42779073119163513,0.290360264480114,800.5672210752964,293.6568203680217,1096.4453185703605

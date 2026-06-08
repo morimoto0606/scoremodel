@@ -1,0 +1,20 @@
+[
+  {
+    "config_key": "linear_vp",
+    "sde_type": "linear_vp",
+    "dataset": "swissroll",
+    "n_seeds": 1,
+    "mmd_mean": -0.00039380788803100586,
+    "mmd_std": null,
+    "sw_mean": 1.678480571205711,
+    "sw_std": null,
+    "nan_rate_mean": 0.0,
+    "var_H_mean": 0.9972958564758301,
+    "mean_H_norm_mean": 1.2517411708831787,
+    "var_H_norm_mean": 0.42779073119163513,
+    "sim_seconds_mean": 0.290360264480114,
+    "train_seconds_mean": 800.5672210752964,
+    "reverse_seconds_mean": 293.6568203680217,
+    "total_seconds_mean": 1096.4453185703605
+  }
+]

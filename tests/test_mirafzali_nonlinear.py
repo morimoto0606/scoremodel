@@ -10,6 +10,7 @@ cd /export/home/ymorimoto/github/scoremodel
 python -m pytest tests/test_mirafzali_nonlinear.py -v
 """
 
+import json
 import math
 import numpy as np
 import pytest
@@ -1500,3 +1501,29 @@ class TestNStepsRevConfigurable:
         assert isinstance(metrics, dict)
         metrics_path = tmp_path / "out" / "swissroll" / "mirafzali" / "metrics.json"
         assert metrics_path.exists(), f"metrics.json not found at {metrics_path}"
+        with metrics_path.open() as f:
+            metrics_json = json.load(f)
+
+        for key in (
+            "forward_seconds",
+            "train_seconds",
+            "reverse_seconds",
+            "eval_seconds",
+            "total_seconds",
+            "correction",
+            "n_paths",
+            "n_epochs",
+            "batch_size",
+            "n_steps_per_unit",
+            "n_steps_rev",
+            "n_times",
+        ):
+            assert key in metrics_json, f"missing key {key!r} in metrics.json"
+
+        assert metrics_json["correction"] == "approx"
+        assert metrics_json["n_paths"] == 64
+        assert metrics_json["n_epochs"] == 1
+        assert metrics_json["batch_size"] == 32
+        assert metrics_json["n_steps_per_unit"] == 5
+        assert metrics_json["n_steps_rev"] == 5
+        assert metrics_json["n_times"] == 2

@@ -1,0 +1,17 @@
+[
+  {
+    "seed": 0,
+    "config_key": "linear_vp",
+    "sde_type": "linear_vp",
+    "mmd_rbf": -0.00039380788803100586,
+    "sliced_wasserstein": 1.678480571205711,
+    "nan_rate": 0.0,
+    "var_H": 0.9972958564758301,
+    "mean_H_norm": 1.2517411708831787,
+    "var_H_norm": 0.42779073119163513,
+    "sim_seconds": 0.290360264480114,
+    "train_seconds": 800.5672210752964,
+    "reverse_seconds": 293.6568203680217,
+    "total_seconds": 1096.4453185703605
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "a_correction_lowt_stationary": {
+    "n_paired_seeds": 1,
+    "mean_relative_mmd_improvement": -6.443685300207039,
+    "mean_relative_sw_improvement": -0.013340291449523737,
+    "mmd_ttest_pvalue": null,
+    "sw_ttest_pvalue": null,
+    "scipy_available": true
+  },
+  "full_lowt_stationary": {
+    "n_paired_seeds": 1,
+    "mean_relative_mmd_improvement": -23.877639751552795,
+    "mean_relative_sw_improvement": 0.062413147837521665,
+    "mmd_ttest_pvalue": null,
+    "sw_ttest_pvalue": null,
+    "scipy_available": true
+  }
+}

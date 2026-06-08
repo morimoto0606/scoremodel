@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from pathlib import Path
 from typing import List, Optional, Sequence
 
@@ -60,6 +61,7 @@ try:
         NonlinearSDEConfig,
         reverse_euler_nl,
         sample_stationary_nl,
+        simulate_malliavin_nl,
         simulate_forward_nl,
     )
 except ImportError:
@@ -86,6 +88,7 @@ except ImportError:
         NonlinearSDEConfig,
         reverse_euler_nl,
         sample_stationary_nl,
+        simulate_malliavin_nl,
         simulate_forward_nl,
     )
 
@@ -140,6 +143,7 @@ def run_experiment_nl(
 
     Returns metrics dict.
     """
+    run_start = time.perf_counter()
     is_residual  = method in _RESIDUAL_METHODS
     _base_method = "mirafzali" if is_residual else method
     _residual_mode = (
@@ -173,6 +177,7 @@ def run_experiment_nl(
     print(f"{'='*60}", flush=True)
 
     # ── forward simulation (skipped when pre-computed cache is provided) ──
+    sim_start = time.perf_counter()
     if _sim_cache is not None:
         sim_cache = _sim_cache
         print("  Using pre-computed simulation cache.", flush=True)
@@ -184,9 +189,10 @@ def run_experiment_nl(
             gamma_reg=gamma_reg, device=device,
             correction=correction,
         )
+    sim_seconds = time.perf_counter() - sim_start
 
     # ── build training dataset ─────────────────────────────────────────────
-    # Residual methods train the base mirafzali model first.
+    teacher_start = time.perf_counter()
     print("Building teacher dataset …", flush=True)
     dataset_tuple = build_training_dataset_nl(
         sim_cache,
@@ -203,6 +209,8 @@ def run_experiment_nl(
 
     t_tr, x_tr, s_tr, c_tr = dataset_tuple
     print(f"  training points: {t_tr.shape[0]:,}", flush=True)
+    teacher_seconds = time.perf_counter() - teacher_start
+    forward_seconds = sim_seconds + teacher_seconds
 
     # Plot teacher field at T_max
     T_last = times[-1]
@@ -217,6 +225,7 @@ def run_experiment_nl(
         )
 
     # ── train model ────────────────────────────────────────────────────────
+    train_start = time.perf_counter()
     if _base_method == "mirafzali":
         # Algorithm 6: Fourier-feature residual MLP, AdamW, cosine LR,
         # input/target normalisation, plain MSE (no per-point weights).
@@ -238,6 +247,7 @@ def run_experiment_nl(
             t_tr, x_tr, s_tr, c_tr,
             n_epochs=n_epochs, batch_size=batch_size, lr=lr, device=device,
         )
+    train_seconds = time.perf_counter() - train_start
     # Save base model (always; residual data is not bundled to keep file small).
     torch.save(
         {
@@ -326,7 +336,9 @@ def run_experiment_nl(
             "Use 'stationary' or 'forward_terminal'."
         )
 
+    reverse_start = time.perf_counter()
     samples = reverse_euler_nl(model, X_T_start, cfg, n_steps=_n_steps_rev)
+    reverse_seconds = time.perf_counter() - reverse_start
 
     nan_mask = torch.isnan(samples).any(dim=1)
     nan_rate = float(nan_mask.float().mean().item())
@@ -334,6 +346,7 @@ def run_experiment_nl(
     print(f"  {len(clean):,} clean samples  (nan_rate={nan_rate:.3f})", flush=True)
 
     # ── metrics ────────────────────────────────────────────────────────────
+    eval_start = time.perf_counter()
     centers_np = None
     if dataset == "8gmm":
         _, centers_t = sample_8gmm(1, device="cpu")
@@ -345,6 +358,42 @@ def run_experiment_nl(
         centers_np=centers_np,
         rng=np.random.default_rng(seed),
     )
+
+    # Collect Malliavin diagnostics at terminal time for correction analysis.
+    diag_defaults = {
+        "var_S": None,
+        "var_D": None,
+        "var_delta": None,
+        "var_H": None,
+        "mean_H_norm": None,
+        "var_H_norm": None,
+        "mean_A2": None,
+        "mean_B2": None,
+        "mean_C2": None,
+    }
+    diag_metrics = dict(diag_defaults)
+    try:
+        sampler_diag = get_sampler(dataset)
+        diag_paths = n_paths
+        diag_result = sampler_diag(diag_paths, device=device)
+        X0_diag = diag_result[0] if isinstance(diag_result, tuple) else diag_result
+        T_diag = times[-1]
+        n_steps_diag = _n_steps_for(T_diag, n_steps_per_unit)
+        _, _, diag = simulate_malliavin_nl(
+            X0_diag,
+            T_diag,
+            cfg,
+            n_steps=n_steps_diag,
+            gamma_reg=gamma_reg,
+            correction=correction,
+            return_diagnostics=True,
+        )
+        if isinstance(diag, dict):
+            diag_metrics.update(diag)
+    except Exception as exc:
+        print(f"  Warning: diagnostics collection failed: {exc}", flush=True)
+
+    metrics.update(diag_metrics)
     metrics["reverse_init"] = reverse_init
     if is_residual:
         metrics["residual_alpha"]              = residual_alpha
@@ -370,6 +419,36 @@ def run_experiment_nl(
         outdir / "reverse_samples.png",
         ref_np=ref_np,
     )
+
+    eval_seconds = time.perf_counter() - eval_start
+    total_seconds = time.perf_counter() - run_start
+
+    metrics["correction"] = correction
+    metrics["n_paths"] = n_paths
+    metrics["n_epochs"] = n_epochs
+    metrics["batch_size"] = batch_size
+    metrics["n_steps_per_unit"] = n_steps_per_unit
+    metrics["n_steps_rev"] = _n_steps_rev
+    metrics["n_times"] = len(times)
+    metrics["sim_seconds"] = sim_seconds
+    metrics["teacher_seconds"] = teacher_seconds
+    metrics["forward_seconds"] = forward_seconds
+    metrics["train_seconds"] = train_seconds
+    metrics["reverse_seconds"] = reverse_seconds
+    metrics["eval_seconds"] = eval_seconds
+    metrics["total_seconds"] = total_seconds
+
+    with open(outdir / "metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+
+    print("Timing:", flush=True)
+    print(f"  simulation:    {sim_seconds:8.1f}s", flush=True)
+    print(f"  teacher/build: {teacher_seconds:8.1f}s", flush=True)
+    print(f"  forward total: {forward_seconds:8.1f}s", flush=True)
+    print(f"  train:         {train_seconds:8.1f}s", flush=True)
+    print(f"  reverse:       {reverse_seconds:8.1f}s", flush=True)
+    print(f"  eval/plot:     {eval_seconds:8.1f}s", flush=True)
+    print(f"  total:         {total_seconds:8.1f}s", flush=True)
 
     return metrics
 # ──────────────────────────────────────────────────────────────────────────────
@@ -925,12 +1004,32 @@ def run_residual_multiseed_eval(
                 "seed":       seed,
                 "config_key": config_key,
                 "method":     method,
+                "correction": config_correction,
                 "mmd_rbf":    metrics.get("mmd_rbf"),
                 "sliced_wasserstein": metrics.get("sliced_wasserstein"),
                 "nan_rate":   metrics.get("nan_rate"),
-                "elapsed_seconds": round(elapsed, 2),
+                "elapsed_seconds": round(metrics.get("total_seconds", elapsed), 2),
+                "sim_seconds": metrics.get("sim_seconds"),
+                "teacher_seconds": metrics.get("teacher_seconds"),
+                "forward_seconds": metrics.get("forward_seconds"),
+                "train_seconds": metrics.get("train_seconds"),
+                "reverse_seconds": metrics.get("reverse_seconds"),
+                "eval_seconds": metrics.get("eval_seconds"),
+                "total_seconds": metrics.get("total_seconds"),
             }
-            for diag_key in ("var_H", "var_residual", "mean_residual_norm"):
+            for diag_key in (
+                "var_H",
+                "mean_H_norm",
+                "var_H_norm",
+                "var_S",
+                "var_D",
+                "var_delta",
+                "mean_A2",
+                "mean_B2",
+                "mean_C2",
+                "var_residual",
+                "mean_residual_norm",
+            ):
                 row[diag_key] = metrics.get(diag_key)
             raw_rows.append(row)
 
@@ -973,6 +1072,13 @@ def run_residual_multiseed_eval(
             "sw_std":        float(np.std(sws, ddof=1))  if len(sws) > 1 else None,
             "nan_rate_mean": float(np.mean(nrs))   if nrs   else None,
             "mean_runtime":  float(np.mean(elaps)) if elaps else None,
+            "sim_seconds_mean": float(np.mean(sub["sim_seconds"].dropna())) if "sim_seconds" in sub else None,
+            "teacher_seconds_mean": float(np.mean(sub["teacher_seconds"].dropna())) if "teacher_seconds" in sub else None,
+            "forward_seconds_mean": float(np.mean(sub["forward_seconds"].dropna())) if "forward_seconds" in sub else None,
+            "train_seconds_mean": float(np.mean(sub["train_seconds"].dropna())) if "train_seconds" in sub else None,
+            "reverse_seconds_mean": float(np.mean(sub["reverse_seconds"].dropna())) if "reverse_seconds" in sub else None,
+            "eval_seconds_mean": float(np.mean(sub["eval_seconds"].dropna())) if "eval_seconds" in sub else None,
+            "total_seconds_mean": float(np.mean(sub["total_seconds"].dropna())) if "total_seconds" in sub else None,
         })
 
     summary_json_path = outdir_ds / "summary.json"
@@ -1058,21 +1164,35 @@ def run_residual_multiseed_eval(
     print(f"  paired_tests  → {paired_path}", flush=True)
 
     # ── Print summary table ────────────────────────────────────────────────
-    print(f"\n{'─'*60}")
-    print(f"{'Config':<45}  {'MMD mean±std':>18}  {'SW mean±std':>18}")
-    print(f"{'─'*60}")
+    print(f"\n{'─'*75}")
+    print(f"{'Config':<45}  {'MMD mean±std':>18}  {'SW mean±std':>18}  {'total(s)':>10}")
+    print(f"{'─'*75}")
+    
     for row in summary_rows:
         mmd_str = (
             f"{row['mmd_mean']:.5f}±{row['mmd_std']:.5f}"
             if row["mmd_std"] is not None else
             f"{row['mmd_mean']:.5f}"
         ) if row["mmd_mean"] is not None else "N/A"
+    
         sw_str = (
             f"{row['sw_mean']:.5f}±{row['sw_std']:.5f}"
             if row["sw_std"] is not None else
             f"{row['sw_mean']:.5f}"
         ) if row["sw_mean"] is not None else "N/A"
-        print(f"{row['config_key']:<45}  {mmd_str:>18}  {sw_str:>18}")
+    
+        total_str = (
+            f"{row['total_seconds_mean']:.1f}"
+            if row.get("total_seconds_mean") is not None
+            else "N/A"
+        )
+    
+        print(
+            f"{row['config_key']:<45}  "
+            f"{mmd_str:>18}  "
+            f"{sw_str:>18}  "
+            f"{total_str:>10}"
+        )
 
     return {
         "raw":          raw_rows,
