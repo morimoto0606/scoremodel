@@ -7,7 +7,7 @@ __pycache__/
 
 # ==== Virtual env / build ====
 .env
-.venv
+.venv*
 build/
 dist/
 
@@ -33,3 +33,9 @@ cache/
 *.pt
 *.pth
 *.ckpt
+
+
+#===== upstream ====
+upstream/
+upstream/*
+upstream/ER-SDE-Solver 
