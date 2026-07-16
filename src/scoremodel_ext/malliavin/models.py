@@ -94,12 +94,14 @@ class MirafzaliSkorokhodNet(nn.Module):
     def __init__(
         self,
         x_dim: int = 2,
+        out_dim: int | None = None,
         hidden: int = 512,
         n_blocks: int = 6,
         num_frequencies: int = 16,
         fourier_scale: float = 10.0,
     ):
         super().__init__()
+        out_dim = x_dim if out_dim is None else out_dim
         in_dim = x_dim + 1
         self.ff = FourierFeatures(in_dim, num_frequencies, fourier_scale)
         ff_dim = 2 * num_frequencies
@@ -108,7 +110,7 @@ class MirafzaliSkorokhodNet(nn.Module):
             nn.SiLU(),
         )
         self.blocks = nn.Sequential(*[ResidualBlock(hidden) for _ in range(n_blocks)])
-        self.out_layer = nn.Linear(hidden, x_dim)
+        self.out_layer = nn.Linear(hidden, out_dim)
 
     def forward(self, t, x):
         if t.ndim == 1:
@@ -180,6 +182,7 @@ def train_mirafzali_skorokhod_net(
 
     net = MirafzaliSkorokhodNet(
         x_dim=x.shape[1],
+        out_dim=delta.shape[1],
         hidden=hidden,
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,

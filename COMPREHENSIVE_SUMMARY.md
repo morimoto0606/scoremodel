@@ -11,8 +11,9 @@
 2. [Phase 1: Malliavin微積分による線形・非線形SDEのスコア推定](#phase-1-malliavin微積分による線形非線形sdeのスコア推定)
 3. [Phase 2: Mirafzali高次補正の検証](#phase-2-mirafzali高次補正の検証)
 4. [Phase 3: 多様体上の拡散モデル (Debortoli)](#phase-3-多様体上の拡散モデル-debortoli)
-5. [実験結果と比較](#実験結果と比較)
-6. [結論と今後の方向](#結論と今後の方向)
+5. [多様体 Malliavin 拡張: De Bortoli と水平拡散の比較](#多様体-malliavin-拡張-de-bortoli-と水平拡散の比較)
+6. [実験結果と比較](#実験結果と比較)
+7. [結論と今後の方向](#結論と今後の方向)
 
 ---
 
@@ -807,6 +808,234 @@ python main.py experiment=s2_toy steps=500 batch_size=32 \
 
 ---
 
+## 多様体 Malliavin 拡張: De Bortoli と水平拡散の比較
+
+### 4.1 結論と大方針
+
+多様体上で Mirafzali 型の Malliavin score を使うために、Park 型の水平拡散は数学的に必須ではない。**De Bortoli の base-manifold 上の reverse SDE のままでも Malliavin--Skorokhod teacher を構成できる**。
+
+ただし、次の3点を区別する必要がある。
+
+1. Mirafzali の基本的な Malliavin integration-by-parts 恒等式は多様体に拡張できる。
+2. Mirafzali Theorem 4 / Algorithm 5 の閉形式は、Euclidean 座標での状態非依存な加法ノイズを使うため、De Bortoli にも Park にもそのまま適用できない。
+3. Park の frame-bundle 表現は一般多様体の実装基盤として有用だが、Malliavin 計算を加法ノイズ問題に変えるものではない。
+
+したがって、まず De Bortoli の base-manifold reverse SDE に一般形の Malliavin teacher を組み込み、その後に同じ teacher 計算を Park の horizontal development に載せ替えるのが最も安全である。
+
+### 4.2 多様体上の Malliavin score の一般式
+
+多様体値拡散の終点を $F=X_t\in M$ とする。Brownian noise の次元を $r$ とすると、Malliavin 微分は
+
+$$
+D_sF:\mathbb{R}^r\longrightarrow T_FM
+$$
+
+である。終点接空間上の Malliavin 共分散を
+
+$$
+C_t=\int_0^t D_sF(D_sF)^*\,\mathrm{d}s:
+T_FM\longrightarrow T_FM
+$$
+
+とし、終点ベクトル場 $V(F)\in T_FM$ に対する covering process を
+
+$$
+u_s^V=(D_sF)^*C_t^{-1}V(F)
+$$
+
+と定義する。このとき $D_{u^V}F=V(F)$ が成り立つ。Riemannian volume に関する終点密度を $p_t$ とすると、一般に
+
+$$
+V\log p_t(y)
+=-\mathbb{E}[\delta(u^V)\mid X_t=y]
+-\operatorname{div}_M V(y)
+$$
+
+である。Mirafzali の Euclidean 公式は、$V$ が定数ベクトル場で $\operatorname{div}V=0$ の場合である。多様体上では、使用する接ベクトル場の divergence も含めてスコアを復元する必要がある。
+
+### 4.3 De Bortoli のまま実行する場合
+
+De Bortoli の多様体 Brownian motion / Langevin SDE は局所座標で
+
+$$
+\mathrm{d}X_t^i
+=b^i(X_t)\,\mathrm{d}t
++\sigma_a^i(X_t)\circ\mathrm{d}W_t^a
+$$
+
+と書かれ、$\sigma_a^i(X)$ は状態依存する。したがって Mirafzali Algorithm 5 の $Y,Z,A,B,C$ をコピーすることはできないが、上の一般式は有効である。$\delta(u)$ は次のいずれかで計算できる。
+
+- 状態依存拡散の第一・第二変分方程式を導出する。
+- SDE solver 全体を Brownian increments の関数とみなし、JVP/VJP で Malliavin 微分と Skorokhod divergence を計算する。
+- Bismut--Elworthy--Li 型の adapted weight を使う。
+
+学習した Malliavin score は De Bortoli の reverse GRW/SDE に直接入れられる。まず $S^2$ で score と reverse generation を検証するなら、Park 型に移る必要はない。
+
+### 4.4 Park horizontal diffusion との組み合わせ
+
+Park 型では状態を $U_t=(X_t,e_t)\in O(M)$ とし、
+
+$$
+\mathrm{d}U_t
+=b^{\mathrm{Hor}}(U_t)\,\mathrm{d}t
++\sum_{a=1}^d H_a(U_t)\circ\mathrm{d}W_t^a
+$$
+
+を解く。$e_t:\mathbb{R}^d\to T_{X_t}M$ は平行移動される正規直交フレームである。この表現の利点は次の通り。
+
+- noise の座標を常に $\mathbb{R}^d$ に固定できる。
+- score をフレーム係数 $s^a\in\mathbb{R}^d$ として表現できる。
+- hairy-ball problem のような大域的接フレームの非存在を回避できる。
+- exp/log map ではなく、metric、Christoffel 記号、horizontal lift を中心に実装できる。
+- 一般のパラメトリック曲面や学習 metric へ拡張しやすい。
+
+一方、$H_a(U)$ 自体が状態依存であるため、Park に移っても Mirafzali Algorithm 5 の加法ノイズ仮定は満たされない。frame-bundle 上では
+
+$$
+D_sU_t=J_{t\leftarrow s}H(U_s),
+\qquad
+u_s^{(a)}=(D_sU_t)^*C_t^{-1}H_a(U_t)
+$$
+
+を計算する。Sasaki/Haar volume に対して $H_a$ が divergence-free であることを確認できれば、
+
+$$
+H_a\log\rho_t^{\mathrm{Hor}}(U)
+=-\mathbb{E}[\delta(u^{(a)})\mid U_t=U]
+$$
+
+となり、Mirafzali Algorithm 6 型の条件付き回帰に帰着できる。ただし full frame bundle 上の共分散は hypoelliptic で小時間に悪条件化しやすい。base score だけが必要な場合は $F=X_t$ の接空間共分散を使う方が安定である。
+
+### 4.5 Park 論文に関する理論上の注意
+
+[Park_Horizontal_Diffusion_Mode.pdf](docs/references/Park_Horizontal_Diffusion_Mode.pdf) の frame-bundle と horizontal lift の構成は有用である。しかし Proposition 2.3 / D.1 の「Euclidean score を水平 lift すれば frame-bundle の真の score になる」という主張は、そのまま基礎定理として使うには問題が残る。
+
+- stochastic development の $U_t$ は Euclidean 終点 $E_t$ だけでは決まらず、path $E_{[0,t]}$ 全体に依存する。
+- したがって一般に $\rho_t^{\mathrm{Hor}}(U_t)=\rho_t(E_t)$ とは言えない。
+- Euclidean path と初期フレームを固定すると $U_t$ は決定論的になり、「path に条件付けた滑らかな過渡密度」の議論は再検討が必要である。
+- Hörmander の bracket-generating 条件は曲率があるだけでは十分ではない。flat torus、積多様体、特殊 holonomy では full $O(M)$ を生成しない場合がある。
+- Algorithm 5 の $U\leftarrow U+H\,\mathrm{d}E$ は Stratonovich SDE の単純 Euler 更新であり、midpoint または stochastic Heun が望ましい。
+
+したがって Park と Mirafzali を組み合わせるときは、Euclidean score-lift 命題に依存せず、horizontal SDE の終点写像から Malliavin weight を直接構成する。
+
+### 4.6 状態依存拡散の離散 Skorokhod 実装
+
+Mirafzali Algorithm 5 の複雑な閉形式を一般化する代わりに、離散 Gaussian 空間上の Skorokhod divergence を自動微分で計算できる。
+
+$N$ step の Brownian noise を $Z\in\mathbb{R}^{Nr}$、離散 solver の終点を $F(Z)$ とし、
+
+$$
+J_Z=\frac{\partial F}{\partial Z},
+\qquad
+C=J_ZJ_Z^*,
+\qquad
+U=J_Z^*(C+\lambda I)^{-1}
+$$
+
+とする。離散 Gaussian integration-by-parts より、出力方向 $a$ の Skorokhod integral は
+
+$$
+\delta(U_{\cdot a})
+=U_{\cdot a}^{\mathsf T}Z
+-\operatorname{div}_Z U_{\cdot a}
+$$
+
+である。第2項は JAX/PyTorch の JVP/VJP で計算し、小規模な $S^2$ では exact Jacobian、大規模では Hutchinson trace estimator を使う。これは状態依存拡散にも適用でき、Mirafzali Algorithm 5 の $A,B,C$ 補正を solver の自動微分で一般化する方法である。
+
+### 4.7 Park 型 solver の実装要件
+
+frame state を $U=(x,e)$、$e^\mathsf{T}g(x)e=I$ とする。フレーム座標変位 $w\in\mathbb{R}^d$ の horizontal lift は
+
+$$
+\mathrm{d}x^i=e_a^i w^a,
+\qquad
+\mathrm{d}e_b^k=-\Gamma^k_{ij}(x)e_a^i e_b^j w^a
+$$
+
+である。実装には次が必要になる。
+
+- metric $g(x)$、inverse metric $g^{-1}(x)$、Christoffel 記号 $\Gamma^k_{ij}(x)$
+- Stratonovich midpoint または stochastic Heun integrator
+- metric polar decomposition によるフレーム再正規直交化
+- chart transition または manifold retraction
+- solver 全体に対する JVP/VJP
+- gauge-equivariant score network
+
+ネットワークは Euclidean 終点 $E_t$ だけを入力にせず、少なくとも $(t,x,e)$ に依存し、
+
+$$
+a_\theta(t,x,eh)=h^{-1}a_\theta(t,x,e)
+$$
+
+を満たすようにする。学習する horizontal score は
+
+$$
+s_\theta^{\mathrm{Hor}}(t,U)=H_e(U)[a_\theta(t,x,e)]
+$$
+
+である。最初の $S^2$ 実験では ambient network $v_\theta(t,x)\in\mathbb{R}^3$ を使い、
+
+$$
+s_\theta(t,x)=(I-xx^\mathsf{T})v_\theta(t,x)
+$$
+
+と接空間に射影する構成の方が検証しやすい。Park 型のフレーム係数は $e_t^\mathsf{T}s_\theta$ から得られる。
+
+### 4.8 推奨する段階的実験
+
+#### Stage A: $S^2$ 上の De Bortoli + Malliavin
+
+1. $X_t\in S^2$ と補助的な平行フレーム $e_t\in\mathbb{R}^{3\times2}$ を同時にシミュレートする。
+2. 終点を $F=X_t$ とし、$D_sX_t$ と接空間上の $C_t$ を計算する。
+3. 離散 Gaussian divergence から Skorokhod teacher を作る。
+4. Mirafzali Algorithm 6 型ネットワークで $(t,X_t)\mapsto\mathbb{E}[\delta\mid X_t]$ を回帰する。
+5. $S^2$ heat kernel のスペクトルスコアと比較する。
+6. 学習 score を De Bortoli の reverse GRW に入れる。
+
+#### Stage B: Park horizontal solver
+
+1. sphere、flat torus、catenoid に対して horizontal lift と Stratonovich solver を実装する。
+2. $e^\mathsf{T}g(x)e=I$、base-point constraint、gauge equivariance を unit test する。
+3. 同じ離散 Malliavin teacher を $F=U_t$ または $F=X_t$ に適用する。
+4. $S^2$ で Stage A と同一スコアが得られることを確認する。
+5. exp/log map が実用的でない一般曲面に拡張する。
+
+### 4.9 既存コードの再利用と修正点
+
+[src/scoremodel_ext/malliavin/models.py](src/scoremodel_ext/malliavin/models.py) の `MirafzaliSkorokhodNet` と Algorithm 6 型の条件付き回帰は再利用できる。ただし多様体用に次の修正が必要である。
+
+- input dimension と target/output dimension を分離する。
+- ambient 出力を必ず接空間に射影する。
+- rotating frame 係数に対する成分別 mean/std normalization は gauge-equivariance を壊すため、invariant normalization に変更する。
+- frame を入力に含める場合は gauge-equivariant architecture を使う。
+
+[src/scoremodel_ext/malliavin/sde_nonlinear.py](src/scoremodel_ext/malliavin/sde_nonlinear.py) の `approx` は先取り的 integrand に必要な Skorokhod correction を含まず、`mirafzali_full` も未検証の実験的実装である。多様体版の理論基準としては使わず、ネットワーク、データ管理、評価 harness を中心に再利用する。
+
+### 4.10 Phase 3 の現行数値結果に関する注意
+
+[NUMERICAL_RESULTS_REFERENCE.md](NUMERICAL_RESULTS_REFERENCE.md) の S² teacher 比較は、新しい Malliavin teacher の ground truth としてそのまま使えない。
+
+- `s_var = log/t` は一般の時間での厳密 score ではなく、Varadhan の小時間近似である。
+- `thresh=0.5` では実装が $t\leq0.5$ のとき明示的に `s_db=s_var` を選ぶため、RMSE=0 は独立な一致検証ではない。
+- $t=0.01$ の `mean_norm_var \approx 6.4e-15` は Brownian scaling と矛盾し、数値上の不具合を示している。
+- Markdown の RMSE 表と `raw_results.csv` は一致していない。例えば CSV の $t=0.1,n_{\max}=20,\text{thresh}=0$ は約 $0.0777$ であり、本文の $3.99$ ではない。
+
+今後の ground truth には `thresh=0` の球面スペクトル heat-kernel score を使い、`log/t` は小時間の sanity check に限定する。
+
+### 4.11 実装開始時点の構成
+
+上の方針に従い、次の reference 実装を追加した。計算負荷の高い exact Jacobian / Skorokhod divergence の実行は GPU サーバー側で行う。
+
+- [malliavin_teacher.py](src/scoremodel_ext/manifold/malliavin_teacher.py): endpoint map だけに依存する共通離散 Malliavin--Skorokhod backend
+- [s2_malliavin.py](src/scoremodel_ext/manifold/s2_malliavin.py): De Bortoli 型 S² GRW、接空間 teacher、スペクトル heat-kernel score
+- [experiment_s2_malliavin_teacher.py](src/scoremodel_ext/manifold/experiment_s2_malliavin_teacher.py): GPU サーバー用 teacher 生成・条件付き平均診断 CLI
+- [horizontal_development.py](src/scoremodel_ext/manifold/horizontal_development.py): Park 型 horizontal lift、Stratonovich Heun、共通 teacher backend への adapter
+- [MANIFOLD_MALLIAVIN_IMPLEMENTATION.md](docs/MANIFOLD_MALLIAVIN_IMPLEMENTATION.md): サーバー実行手順と検証項目
+
+この段階の Park adapter は horizontal endpoint map のみを提供し、Euclidean endpoint density や Euclidean score を参照しない。
+
+---
+
 ## 実験結果と比較
 
 ### 全実験の概要
@@ -956,6 +1185,7 @@ SwissRoll は手法差を見せやすい比較用データセットとして使�
 | 2026-07-16 | 実験まとめ完成版作成 |
 | | Phase 1-3 の統合総括 |
 | | 数式 + コード例 + 結果の融合 |
+| | De Bortoli / Park / Mirafzali を組み合わせる多様体 Malliavin 拡張の理論・実装方針を追記 |
 
 ---
 
@@ -974,4 +1204,3 @@ SwissRoll は手法差を見せやすい比較用データセットとして使�
 - Phase別の詳細メトリクス表
 
 本COMPREHENSIVE_SUMMARY.mdと併読して、コード実装 → 数値結果 の完全な対応を把握できます。
-
