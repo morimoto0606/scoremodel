@@ -697,6 +697,35 @@ thresh=0.5:  RMSE ≈ 0.0   ← 数値零 (人工的)
 - `summary.json`: 統計量 (mean_norm_var, mean_norm_db など)
 - `rmse_vs_t.png`: 視覚化 (RMSE の時間発展)
 
+#### 画像で見ると何をやっているか
+
+Phase 3 では、実際には次の 2 種類の検証をしています。
+
+1. **スコア式の比較 (理論検証)**
+  - `s_var` と `s_db` の一致度を時間・展開次数で評価
+  - 画像: `results/s2_debortoli_teacher_check/rmse_vs_t.png`
+
+![RMSE vs time on S²](results/s2_debortoli_teacher_check/rmse_vs_t.png)
+
+2. **S² toy 生成の再現 (生成検証)**
+  - 目標分布 (vMF) と生成分布の 3D 散布図を比較
+  - 画像:
+    - `results/debortoli_reproduction/target_vmf_samples.png`
+    - `results/debortoli_reproduction/generated_samples.png`
+
+**Target (vMF on S²)**
+
+![Target vMF samples on S²](results/debortoli_reproduction/target_vmf_samples.png)
+
+**Generated (De Bortoli S² toy)**
+
+![Generated samples on S²](results/debortoli_reproduction/generated_samples.png)
+
+読み方:
+- target は球面上の局所に集中している
+- generated は球面全体に広がり、濃度が弱い
+- つまり、実装は動作しているが、分布一致の改善余地が残る
+
 #### 解釈と結論
 
 | 時刻 | 両者の関係 | 物理的意味 |

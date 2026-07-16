@@ -416,10 +416,49 @@ python main.py experiment=s2_toy steps=500 batch_size=32 eval_batch_size=32 warm
 ```
 
 **実行結果** (results/debortoli_reproduction/):
-- Status: ✅ **OPERATIONAL**
+- Status: ✅ **SUCCESSFUL**
 - stdout: smoke_stdout.log (全ステップ完了)
 - stderr: エラーなし
-- run_status.json: {"status": "success", "all_imports_ok": true}
+- run_status.json: {"status": "SUCCESSFUL", ...}
+
+### 3.3 De Bortoli実験で「何をしているか」(画像つき)
+
+De Bortoli系は、実際には次の2種類の実験をしています。
+
+1. **S²上のスコア計算式の比較 (理論検証)**
+  - `s_var = log_map / t` と `s_db = grad_marginal_log_prob` の差を測る
+  - 出力: `results/s2_debortoli_teacher_check/rmse_vs_t.png`
+  - 見る点: `t` と `n_max` を変えたときの RMSE の落ち方
+
+2. **S² toy の生成サンプル再現 (生成検証)**
+  - 目標分布 (vMF) と生成分布を 3D 散布図で比較
+  - 出力: `results/debortoli_reproduction/target_vmf_samples.png`,
+        `results/debortoli_reproduction/generated_samples.png`
+  - 見る点: 球面上での集中度 (どれだけ一点近傍に集まるか)
+
+#### 画像比較: target vs generated
+
+**Target (vMF on S²)**
+
+![Target vMF samples on S2](results/debortoli_reproduction/target_vmf_samples.png)
+
+**Generated (De Bortoli S² toy)**
+
+![Generated samples on S2](results/debortoli_reproduction/generated_samples.png)
+
+#### この画像から読めること
+
+- target は球面上の一部に強く集中している (高濃度)
+- generated は球面全体に広がり気味で、集中が弱い
+- したがって、**アルゴリズム自体は動いているが、分布一致はまだ弱い**
+
+この点は `sampling_diagnostics.md` の統計とも一致しています。
+- target の平均結果長: 約 0.935
+- generated の平均結果長: 約 0.344
+
+つまり「何をやっているか」を一言で言うと、
+- 3.1: スコア式同士の数値的一致性チェック
+- 3.3: そのスコアを使った実生成が target 分布にどこまで寄るかのチェック
 
 ---
 
