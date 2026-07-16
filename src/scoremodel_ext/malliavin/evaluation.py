@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Optional
 
-import pandas as pd
-import numpy as np
+try:
+    import pandas as pd
+except ImportError:  # pragma: no cover
+    pd = None
 
 try:
-    from .datasets_2d import get_sampler
-    from .experiment_mirafzali import _mmd_rbf, _mode_coverage_8gmm, _sliced_wasserstein
-except ImportError:
-    from datasets_2d import get_sampler
-    from experiment_mirafzali import _mmd_rbf, _mode_coverage_8gmm, _sliced_wasserstein
+    import numpy as np
+except ImportError:  # pragma: no cover
+    np = None
 
 
 _METHOD_ORDER = [
@@ -25,10 +26,10 @@ _METHOD_ORDER = [
 
 
 def compute_metrics_nl(
-    samples_np: np.ndarray,
+    samples_np: "np.ndarray",
     nan_rate: float,
     dataset_name: str,
-    centers_np: Optional[np.ndarray] = None,
+    centers_np: Optional["np.ndarray"] = None,
     n_ref: int = 10_000,
     rng=None,
 ) -> dict:
@@ -37,6 +38,16 @@ def compute_metrics_nl(
 
     Reference samples are drawn fresh from the dataset distribution.
     """
+    if np is None:
+        raise ImportError("numpy is required for compute_metrics_nl")
+
+    try:
+        from .datasets_2d import get_sampler
+        from .experiment_mirafzali import _mmd_rbf, _mode_coverage_8gmm, _sliced_wasserstein
+    except ImportError:
+        from datasets_2d import get_sampler
+        from experiment_mirafzali import _mmd_rbf, _mode_coverage_8gmm, _sliced_wasserstein
+
     if rng is None:
         rng = np.random.default_rng(42)
 
@@ -81,6 +92,9 @@ def build_results_table(
         Within each dataset block, the best (minimum) value in each
         numeric column is marked with a trailing ``*``.
     """
+    if pd is None:
+        raise ImportError("pandas is required for build_results_table")
+
     base_cols = ["dataset", "method", "mmd", "sliced_wasserstein", "nan_rate"]
     gmm_cols = ["coverage_fraction", "mean_nearest_dist"]
     metric_cols = ["mmd", "sliced_wasserstein", "nan_rate"] + gmm_cols
@@ -148,6 +162,9 @@ def _write_latex_table(df: "pd.DataFrame", path: Path) -> None:
 
     Best values (marked with ``*``) are rendered in \\textbf{}.
     """
+    if pd is None:
+        raise ImportError("pandas is required for _write_latex_table")
+
     col_labels = {
         "dataset": "Dataset",
         "method": "Method",
@@ -199,3 +216,100 @@ def _write_latex_table(df: "pd.DataFrame", path: Path) -> None:
     ]
 
     path.write_text("\n".join(lines) + "\n")
+
+
+def write_evidence_index(
+    outbase: str,
+    index_name: str = "EVIDENCE_INDEX.md",
+) -> Path:
+    """
+    Build a markdown index that links per-run comments to image evidence.
+
+    A "run" is any directory that contains ``metrics.json``.
+    For each run we include:
+    - key metrics from ``metrics.json`` (if present)
+    - image artifacts in the same directory (PNG/JPG/JPEG/GIF/WEBP/SVG)
+
+    Parameters
+    ----------
+    outbase : str
+        Root directory that contains run outputs.
+    index_name : str
+        Output markdown file name under ``outbase``.
+
+    Returns
+    -------
+    Path
+        Path to the generated markdown file.
+    """
+    root = Path(outbase)
+    root.mkdir(parents=True, exist_ok=True)
+    out_path = root / index_name
+
+    image_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+    metric_files = sorted(root.rglob("metrics.json"))
+
+    lines = [
+        "# Evidence Index",
+        "",
+        "This file maps run-level comments to concrete image artifacts.",
+        "",
+    ]
+
+    if not metric_files:
+        lines += [
+            "No run directories with metrics.json were found.",
+            "",
+        ]
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+        return out_path
+
+    for metrics_path in metric_files:
+        run_dir = metrics_path.parent
+        run_rel = run_dir.relative_to(root).as_posix()
+
+        try:
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+        except Exception:
+            metrics = {}
+
+        images = sorted(
+            [p for p in run_dir.iterdir() if p.is_file() and p.suffix.lower() in image_suffixes]
+        )
+
+        lines.append(f"## {run_rel}")
+        lines.append("")
+
+        key_metrics = []
+        for k in ("mmd_rbf", "sliced_wasserstein", "nan_rate"):
+            if k in metrics:
+                key_metrics.append(f"- {k}: {metrics[k]}")
+        if key_metrics:
+            lines.extend(key_metrics)
+            lines.append("")
+
+        if not images:
+            lines.append("No image evidence found in this run directory.")
+            lines.append("")
+            continue
+
+        lines += [
+            "| comment | evidence |",
+            "|---|---|",
+        ]
+        for img in images:
+            img_rel = img.relative_to(root).as_posix()
+            comment = img.stem
+            lines.append(f"| {comment} | [{img.name}]({img_rel}) |")
+        lines.append("")
+
+        # Inline previews make it easy to inspect evidence without opening files one by one.
+        for img in images:
+            img_rel = img.relative_to(root).as_posix()
+            lines.append(f"### {img.stem}")
+            lines.append("")
+            lines.append(f"![{img.stem}]({img_rel})")
+            lines.append("")
+
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path

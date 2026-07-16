@@ -39,7 +39,12 @@ import torch
 
 try:
     from .datasets_2d import get_sampler, sample_8gmm
-    from .evaluation import build_results_table, compute_metrics_nl, _write_latex_table
+    from .evaluation import (
+        _write_latex_table,
+        build_results_table,
+        compute_metrics_nl,
+        write_evidence_index,
+    )
     from .experiment_mirafzali import train_score_mlp, _plot_scatter, _plot_teacher_field
     from .mirafzali_teacher import (
         DEFAULT_NL_CFG,
@@ -66,7 +71,12 @@ try:
     )
 except ImportError:
     from datasets_2d import get_sampler, sample_8gmm
-    from evaluation import build_results_table, compute_metrics_nl, _write_latex_table
+    from evaluation import (
+        _write_latex_table,
+        build_results_table,
+        compute_metrics_nl,
+        write_evidence_index,
+    )
     from experiment_mirafzali import train_score_mlp, _plot_scatter, _plot_teacher_field
     from mirafzali_teacher import (
         DEFAULT_NL_CFG,
@@ -782,6 +792,8 @@ def run_phase_b(
     print(f"\nPhase B summary → {summary_path}")
 
     build_results_table(results, outbase=outbase)
+    evidence_index_path = write_evidence_index(outbase)
+    print(f"Evidence index  → {evidence_index_path}")
     return results
 
 
