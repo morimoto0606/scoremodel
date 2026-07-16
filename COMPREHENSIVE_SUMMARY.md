@@ -829,7 +829,7 @@ Phase 3 (Debortoli): 3個
 
 #### SwissRoll ベンチマーク
 
-SwissRoll は手法差を見せやすい比較用データセットとして使っています。各手法の逆過程サンプルと teacher field は [NUMERICAL_RESULTS_REFERENCE.md](NUMERICAL_RESULTS_REFERENCE.md#L129) にまとめてあり、同条件の `raw / binned / nw / knn_nw` を並べて確認できます。
+SwissRoll は手法差を見せやすい比較用データセットとして使っています。各手法の逆過程サンプルと teacher field は [NUMERICAL_RESULTS_REFERENCE.md](NUMERICAL_RESULTS_REFERENCE.md) にまとめてあり、同条件の比較を並べて確認できます。
 
 - raw: MMD 0.003269, SW 1.633061
 - binned: MMD 0.008683, SW 1.746528

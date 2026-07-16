@@ -126,32 +126,83 @@ n_epochs = 8000
 
 **使用用途**: 以降のすべてのMirafzali実験の比較基準
 
-### 2.1.1 SwissRoll ベンチマークギャラリー
+### 2.1.1 SwissRoll ベンチマーク (更新時刻ベース)
 
-同一条件の SwissRoll 比較は `results/mirafzali_nonlinear_equal_points/swissroll/` にまとまっています。各手法の逆過程サンプルを並べると、どの方法が SwissRoll の曲率を保てているかが直接見えます。
+以前の `mirafzali_nonlinear_equal_points` は古い実験なので、ここでは更新時刻が新しく、`nan_rate=0` で成功している run を優先します。
 
-| 手法 | MMD | Sliced Wasserstein | 逆過程サンプル |
-|---|---:|---:|---|
-| raw | 0.003269 | 1.633061 | ![SwissRoll raw](results/mirafzali_nonlinear_equal_points/swissroll/raw/reverse_samples.png) |
-| binned | 0.008683 | 1.746528 | ![SwissRoll binned](results/mirafzali_nonlinear_equal_points/swissroll/binned/reverse_samples.png) |
-| nw | 0.005454 | 1.706434 | ![SwissRoll NW](results/mirafzali_nonlinear_equal_points/swissroll/nw/reverse_samples.png) |
-| knn_nw | 0.011519 | 2.816643 | ![SwissRoll kNN-NW](results/mirafzali_nonlinear_equal_points/swissroll/knn_nw/reverse_samples.png) |
+時刻確認 (主要ファイル):
+- `linear_vs_nonlinear_swissroll_lowt_stationary_5seed/linear_vp/seed0/metrics.json`: 2026-06-09 00:17
+- `mirafzali_variance_diag_5seed/swissroll/summary.csv`: 2026-06-05 17:24
+- `mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/summary.csv`: 2026-06-03 15:37
 
-### Teacher field comparison
+### Linear vs Nonlinear (最新成功ケース)
 
-| 手法 | teacher_field |
-|---|---|
-| raw | ![SwissRoll raw teacher field](results/mirafzali_nonlinear_equal_points/swissroll/raw/teacher_field.png) |
-| binned | ![SwissRoll binned teacher field](results/mirafzali_nonlinear_equal_points/swissroll/binned/teacher_field.png) |
-| nw | ![SwissRoll NW teacher field](results/mirafzali_nonlinear_equal_points/swissroll/nw/teacher_field.png) |
-| knn_nw | ![SwissRoll kNN-NW teacher field](results/mirafzali_nonlinear_equal_points/swissroll/knn_nw/teacher_field.png) |
+| 比較 | 参照フォルダ | MMD | Sliced Wasserstein | NaN率 |
+|---|---|---:|---:|---:|
+| Linear VP | `results/linear_vs_nonlinear_swissroll_lowt_stationary_5seed/linear_vp/seed0` | -0.000394 | 1.678481 | 0.0 |
+| Nonlinear (approx) | `results/mirafzali_variance_diag_5seed/swissroll` | 0.000200 | 1.706881 | 0.0 |
+
+**サンプル画像**:
+
+![SwissRoll Linear VP (latest)](results/linear_vs_nonlinear_swissroll_lowt_stationary_5seed/linear_vp/seed0/reverse_samples.png)
+
+![SwissRoll Nonlinear approx (latest successful)](results/mirafzali_variance_diag_5seed/swissroll/seed0/approx_lowt_stationary/reverse_samples.png)
 
 補足:
-- ここでは `reverse_init = stationary`、`n_samples = 20000` の同条件で比較しています。
-- この SwissRoll ベンチマークでは raw が MMD/SW とも最良で、binned は 8-GMM のときのような優位性は出ていません。
-- つまり、Malliavin の近似アルゴリズムは「どのデータ形状に対して教師を作るか」で挙動が変わるため、SwissRoll は比較に適した厳しめのケースです。
+- 線形 VP がわずかに良い指標ですが、非線形 approx も近い水準で安定しています。
+- どちらも `nan_rate=0` なので、比較ベンチマークとして有効です。
 
-必要なら、各手法の `teacher_field.png` も同じ節に追加できます。
+### 2.1.2 SwissRoll が「うまく行く/行かない」ポイント
+
+あなたの指摘どおり、**t=0 付近を細かく切る (lowt)** のは重要です。実際に、最新の成功 run は early-time を高密度に入れています。
+
+lowt の時間グリッド (実験設定):
+
+```python
+times = [
+  0.005, 0.01, 0.02, 0.035,
+  0.05, 0.075, 0.10,
+  0.20, 0.35, 0.50, 0.75, 1.00,
+]
+```
+
+この設定は [experiment_mirafzali_full_compare.py](src/scoremodel_ext/malliavin/experiment_mirafzali_full_compare.py) と [experiment_linear_vs_nonlinear_swissroll.py](src/scoremodel_ext/malliavin/experiment_linear_vs_nonlinear_swissroll.py) で使われています。
+
+#### うまく行く側 (成功例)
+
+- 低時刻を細かく分割した lowt 設定を使う
+- reverse の刻みを十分取る (`n_steps_rev=1000`)
+- reverse 初期化を `stationary` に固定する
+- 指標に応じて補正を選ぶ (MMD なら approx, SW なら full)
+
+代表値 (最新成功):
+- `mirafzali_variance_diag_5seed / approx_lowt_stationary`: MMD 0.000200, SW 1.706881
+- `linear_vs_nonlinear_swissroll_lowt_stationary_5seed / linear_vp`: MMD -0.000394, SW 1.678481
+
+成功可視化 (lowt, seed0):
+
+![SwissRoll success example (lowt approx)](results/mirafzali_variance_diag_5seed/swissroll/seed0/approx_lowt_stationary/reverse_samples.png)
+
+#### うまく行かない側 (失敗/劣化例)
+
+- 低時刻の分割が粗い設定では、初期拡散の不確実性を吸収しづらく、全体がノイジーになりやすい
+- 補正項を強くしても、条件によっては MMD が悪化する
+
+代表値 (劣化例):
+- `mirafzali_correction_compare_swissroll_3seeds / approx`: MMD 0.036937, SW 1.745575
+- `mirafzali_correction_compare_swissroll_3seeds / full`: MMD 0.046283, SW 1.532443
+- `mirafzali_correction_compare_swissroll_strong_1seed / approx_strong`: SW 7.951938 (大幅悪化)
+
+劣化可視化 (seed0):
+
+![SwissRoll failure example (coarser/older setup)](results/mirafzali_correction_compare_swissroll_3seeds/swissroll/seed0/approx/reverse_samples.png)
+
+#### 実運用の判断ルール
+
+1. まず lowt グリッドを使う (0.005, 0.01, 0.02, 0.035 を含める)
+2. 次に approx を基準として実行する
+3. SW を詰めたい場合だけ full を追加比較する
+4. teacher_field は単体で決めず、必ず reverse_samples とペアで判断する
 
 ### 2.2 完全 Algorithm 5 vs 近似の比較
 
@@ -169,10 +220,52 @@ H_full = simulate_malliavin_nl_mirafzali_full(X0, T, cfg, correction="mirafzali_
 rmse_diff = sqrt(mean((H_approx - H_full)**2))
 ```
 
-**実行結果** (`results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/`):
-- RMSE差分: < 1%
-- 計算コスト比: full は approx の 5-10 倍
-- **結論**: 完全版を計算する実用的価値がない
+**実行結果** (`results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/summary.csv`):
+
+| correction | MMD mean | SW mean | NaN率 | 備考 |
+|---|---:|---:|---:|---|
+| approx | 0.000200 | 1.706881 | 0.0 | MMD 最良 |
+| a_correction | 0.002089 | 1.736293 | 0.0 | この条件では劣化 |
+| mirafzali_full | 0.002293 | 1.612339 | 0.0 | SW 最良 |
+
+**seed0 の可視化**:
+
+![SwissRoll approx (seed0)](results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/seed0/approx_lowt_stationary/reverse_samples.png)
+
+![SwissRoll a_correction (seed0)](results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/seed0/a_correction_lowt_stationary/reverse_samples.png)
+
+![SwissRoll full (seed0)](results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/seed0/full_lowt_stationary/reverse_samples.png)
+
+**teacher_field の見方 (実用ガイド)**:
+
+teacher_field は「各位置で、次にどちらへ流すとデータ密度が上がるか」を示すベクトル場です。
+
+![Teacher field approx (seed0)](results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/seed0/approx_lowt_stationary/teacher_field.png)
+
+![Teacher field a_correction (seed0)](results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/seed0/a_correction_lowt_stationary/teacher_field.png)
+
+![Teacher field full (seed0)](results/mirafzali_approx_vs_full_swissroll_lowt_stationary_1seed/swissroll/seed0/full_lowt_stationary/teacher_field.png)
+
+見るポイントは 4 つです。
+
+1. 向きの一貫性
+  近い場所の矢印がバラバラすぎると、逆過程でノイズを拾いやすくなります。
+
+2. 曲線追従性
+  SwissRoll の帯に沿って、矢印が滑らかに曲がっているかを見ます。帯を横切る矢印が多いと形が崩れやすいです。
+
+3. 外周の安定性
+  外側 (点が薄い領域) で長い矢印がランダム方向に出ていると、生成サンプルが外へ飛びやすくなります。
+
+4. 中心過密の有無
+  全矢印が中心へ強く集まりすぎると、最終サンプルが中心に潰れやすくなります。
+
+このページの 3 画像では、approx は向きの散らばりが比較的小さく、full は外周まで矢印が伸びる分だけ SW 側で有利、a_correction は局所の揺らぎが増えやすい、という読み方ができます。
+
+**読み方**:
+- MMD重視なら approx が優勢。
+- SW重視なら full が優勢。
+- いずれも成功 (NaN率 0.0) なので、用途に応じて選択するのが妥当。
 
 ### 2.3 Mirafzali Algorithm 6 実装
 
