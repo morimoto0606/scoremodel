@@ -1,0 +1,19 @@
+{
+  "covariance_regularization": 1e-06,
+  "device": "cpu",
+  "dtype": "float64",
+  "generation_seconds": 0.942271750420332,
+  "knn_k": 4,
+  "max_endpoint_norm_error": 2.220446049250313e-16,
+  "max_tangent_residual": 6.661338147750939e-16,
+  "mean_cosine_knn_vs_heat": 0.583092025752324,
+  "mean_largest_covariance_eigenvalue": 0.34273204103909816,
+  "mean_score_weight_norm": 1.7470945681519843,
+  "mean_second_covariance_eigenvalue": 0.2735006497623207,
+  "mean_smallest_covariance_eigenvalue": 1.8437453379228185e-17,
+  "n_paths": 8,
+  "n_steps": 4,
+  "nan_rate": 0.0,
+  "rmse_knn_vs_heat": 0.9694425167946521,
+  "terminal_time": 0.3
+}

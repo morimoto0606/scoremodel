@@ -460,6 +460,51 @@ De Bortoli系は、実際には次の2種類の実験をしています。
 - 3.1: スコア式同士の数値的一致性チェック
 - 3.3: そのスコアを使った実生成が target 分布にどこまで寄るかのチェック
 
+### 3.4 Stage A 実行結果 (De Bortoli + 一般形 Malliavin teacher)
+
+方針:
+- 先に base manifold (`F = X_t`) で一般形 Malliavin--Skorokhod teacher を動かす
+- Park horizontal への載せ替えは Stage A の動作確認後に行う
+
+実行コマンド (スモーク):
+
+```bash
+PYTHONPATH=src python -m scoremodel_ext.manifold.experiment_s2_malliavin_teacher \
+  --device cpu \
+  --dtype float64 \
+  --n-paths 8 \
+  --n-steps 4 \
+  --time 0.3 \
+  --knn-k 4 \
+  --outdir results/s2_malliavin_teacher_exact_smoke
+```
+
+出力:
+- `results/s2_malliavin_teacher_exact_smoke/config.json`
+- `results/s2_malliavin_teacher_exact_smoke/metrics.json`
+
+指標 (`metrics.json`):
+
+| metric | value | 判定 |
+|---|---:|---|
+| nan_rate | 0.0 | OK |
+| max_endpoint_norm_error | 2.22e-16 | 球面制約 OK |
+| max_tangent_residual | 6.66e-16 | 接空間制約 OK |
+| mean_smallest_covariance_eigenvalue | 1.84e-17 | 法線方向ほぼ0 |
+| mean_second_covariance_eigenvalue | 2.74e-01 | 接空間モード確保 |
+| mean_largest_covariance_eigenvalue | 3.43e-01 | 接空間モード確保 |
+| mean_cosine_knn_vs_heat | 0.583 | 要改善 |
+| rmse_knn_vs_heat | 0.969 | 要改善 |
+
+現時点の結論:
+- **動作可否の第一関門は通過** (teacher 計算は壊れていない)
+- ただし score 品質はまだスモーク段階
+
+次に更新する実験 (Stage B へ進む前):
+1. GPU で n_paths / n_steps / time sweep を実行
+2. `mean_cosine_knn_vs_heat` と `rmse_knn_vs_heat` の改善を確認
+3. その後、同じ teacher backend を horizontal development adapter に接続
+
 ---
 
 ## 実験フォルダ一覧と対応ファイル

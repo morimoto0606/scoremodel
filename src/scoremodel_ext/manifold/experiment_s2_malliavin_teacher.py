@@ -21,6 +21,7 @@ from scoremodel_ext.malliavin.models import train_mirafzali_skorokhod_net
 from .s2_malliavin import (
     S2SkorokhodScoreModel,
     s2_heat_kernel_score,
+    s2_reverse_grw,
     sample_s2_teacher_path,
 )
 
@@ -244,6 +245,135 @@ def diagnose_s2_teacher_dataset(
     }
 
 
+def _build_heat_score_function(
+    initial_point: torch.Tensor,
+    *,
+    n_heat_terms: int,
+):
+    """Return score_fn(t, x_batch) for reverse GRW diagnostics."""
+
+    def _score_fn(t_batch: torch.Tensor, x_batch: torch.Tensor) -> torch.Tensor:
+        return torch.stack(
+            [
+                s2_heat_kernel_score(
+                    initial_point,
+                    endpoint,
+                    float(t.detach().cpu()),
+                    n_terms=n_heat_terms,
+                )
+                for t, endpoint in zip(t_batch, x_batch)
+            ]
+        )
+
+    return _score_fn
+
+
+def save_target_vs_generated_plot(
+    dataset: Dict[str, torch.Tensor],
+    *,
+    outdir: Path,
+    n_reverse_steps: int,
+    n_visual_paths: int,
+    n_heat_terms: int,
+    seed: int,
+) -> None:
+    """Save Stage A target-vs-generated plots for quick quality checks."""
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib is not installed; skipping target_vs_generated plots")
+        return
+
+    endpoints = dataset["endpoint"]
+    x0 = dataset["initial_point"]
+    terminal_time = float(dataset["time"][0])
+    n_total = endpoints.shape[0]
+    if n_total < 1:
+        return
+
+    n_samples = min(max(1, n_visual_paths), n_total)
+    generator = torch.Generator(device=endpoints.device)
+    generator.manual_seed(seed)
+    if n_samples == n_total:
+        sample_indices = torch.arange(n_total, device=endpoints.device)
+    else:
+        sample_indices = torch.randperm(n_total, generator=generator, device=endpoints.device)[:n_samples]
+    terminal_points = endpoints[sample_indices]
+
+    score_fn = _build_heat_score_function(x0, n_heat_terms=n_heat_terms)
+    reverse_noise = torch.randn(
+        n_reverse_steps,
+        terminal_points.shape[0],
+        3,
+        dtype=terminal_points.dtype,
+        device=terminal_points.device,
+        generator=generator,
+    )
+    generated = s2_reverse_grw(
+        terminal_points,
+        score_fn,
+        terminal_time=terminal_time,
+        n_steps=n_reverse_steps,
+        standard_noise=reverse_noise,
+    )
+
+    endpoints_cpu = terminal_points.detach().cpu()
+    generated_cpu = generated.detach().cpu()
+    x0_cpu = x0.detach().cpu()
+    target_cpu = x0_cpu.repeat(generated_cpu.shape[0], 1)
+
+    figure = plt.figure(figsize=(10, 5))
+    ax_target = figure.add_subplot(1, 2, 1, projection="3d")
+    ax_generated = figure.add_subplot(1, 2, 2, projection="3d")
+    ax_target.scatter(
+        target_cpu[:, 0],
+        target_cpu[:, 1],
+        target_cpu[:, 2],
+        s=10,
+        alpha=0.8,
+        label="target (x0)",
+    )
+    ax_target.set_title("Target at t=0")
+    ax_generated.scatter(
+        generated_cpu[:, 0],
+        generated_cpu[:, 1],
+        generated_cpu[:, 2],
+        s=10,
+        alpha=0.8,
+        label="generated (reverse)",
+    )
+    ax_generated.set_title("Generated via reverse (heat score)")
+
+    for axis in (ax_target, ax_generated):
+        axis.scatter([x0_cpu[0]], [x0_cpu[1]], [x0_cpu[2]], c="red", s=60)
+        axis.set_xlim(-1.05, 1.05)
+        axis.set_ylim(-1.05, 1.05)
+        axis.set_zlim(-1.05, 1.05)
+        axis.set_xlabel("x")
+        axis.set_ylabel("y")
+        axis.set_zlabel("z")
+
+    figure.tight_layout()
+    figure.savefig(outdir / "target_vs_generated.png", dpi=180)
+    plt.close(figure)
+
+    dot_forward = (endpoints_cpu * x0_cpu).sum(dim=1).clamp(-1.0, 1.0)
+    dot_generated = (generated_cpu * x0_cpu).sum(dim=1).clamp(-1.0, 1.0)
+    forward_angle = torch.rad2deg(torch.arccos(dot_forward))
+    generated_angle = torch.rad2deg(torch.arccos(dot_generated))
+
+    figure = plt.figure(figsize=(7, 4))
+    plt.hist(forward_angle.numpy(), bins=30, alpha=0.6, label="forward endpoint")
+    plt.hist(generated_angle.numpy(), bins=30, alpha=0.6, label="generated")
+    plt.xlabel("Angle from target x0 (deg)")
+    plt.ylabel("Count")
+    plt.legend()
+    plt.tight_layout()
+    figure.savefig(outdir / "target_vs_generated_angle_hist.png", dpi=180)
+    plt.close(figure)
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n-paths", type=int, default=64)
@@ -252,6 +382,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--gamma-reg", type=float, default=1e-6)
     parser.add_argument("--heat-terms", type=int, default=80)
     parser.add_argument("--knn-k", type=int, default=8)
+    parser.add_argument("--reverse-steps", type=int, default=100)
+    parser.add_argument("--visual-paths", type=int, default=256)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--dtype", choices=("float32", "float64"), default="float64")
@@ -298,6 +430,15 @@ def main() -> None:
         json.dump(metrics, file, indent=2, sort_keys=True)
     with (args.outdir / "config.json").open("w") as file:
         json.dump(vars(args) | {"outdir": str(args.outdir)}, file, indent=2, default=str)
+
+    save_target_vs_generated_plot(
+        dataset,
+        outdir=args.outdir,
+        n_reverse_steps=args.reverse_steps,
+        n_visual_paths=args.visual_paths,
+        n_heat_terms=args.heat_terms,
+        seed=args.seed,
+    )
 
     print(json.dumps(metrics, indent=2, sort_keys=True))
 

@@ -1009,6 +1009,49 @@ $$
 - rotating frame 係数に対する成分別 mean/std normalization は gauge-equivariance を壊すため、invariant normalization に変更する。
 - frame を入力に含める場合は gauge-equivariant architecture を使う。
 
+### 4.10 実行ステータス (2026-07-17)
+
+方針どおり、最初に De Bortoli base-manifold reverse SDE 側へ一般形 Malliavin--Skorokhod teacher を組み込む Stage A を先行した。
+
+実行済み:
+
+1. 単体テスト
+  - `tests/test_manifold_malliavin_teacher.py`
+  - `tests/test_horizontal_development.py`
+  - 結果: 12 passed
+
+2. Stage A スモーク実験
+  - コマンド: `python -m scoremodel_ext.manifold.experiment_s2_malliavin_teacher --device cpu --dtype float64 --n-paths 8 --n-steps 4 --time 0.3 --knn-k 4 --outdir results/s2_malliavin_teacher_exact_smoke`
+  - 主要指標:
+    - `nan_rate = 0.0`
+    - `max_endpoint_norm_error = 2.22e-16`
+    - `max_tangent_residual = 6.66e-16`
+    - `mean_smallest_covariance_eigenvalue = 1.84e-17`
+    - `mean_second_covariance_eigenvalue = 2.74e-01`
+    - `mean_largest_covariance_eigenvalue = 3.43e-01`
+    - `mean_cosine_knn_vs_heat = 0.583`
+    - `rmse_knn_vs_heat = 0.969`
+
+解釈:
+- 幾何制約 (球面上・接空間性) は良好に満たされており、teacher 計算は破綻していない。
+- ただし score 品質の詰めは未了で、ここは n_paths と n_steps を上げた本番実験で検証する。
+
+補足 (可視化の読み方):
+- `endpoint_scatter.png` は forward 終点分布の可視化であり、生成品質そのものを直接示す図ではない。
+- target 対 generated の比較は次を参照:
+  - `results/s2_malliavin_teacher_exact/target_vs_generated.png`
+  - `results/s2_malliavin_teacher_exact/target_vs_generated_angle_hist.png`
+
+![Stage A target vs generated on S²](results/s2_malliavin_teacher_exact/target_vs_generated.png)
+
+![Stage A angle histogram: target vs generated](results/s2_malliavin_teacher_exact/target_vs_generated_angle_hist.png)
+
+したがって、次の開発順序は次で確定する。
+
+1. Stage A を本番設定で拡張 (GPU, path/step/time sweep)
+2. その後に同じ backend を Park horizontal development へ載せ替え (Stage B)
+3. base endpoint (`F=X_t`) と horizontal endpoint (`F=U_t`) を同一指標で比較
+
 [src/scoremodel_ext/malliavin/sde_nonlinear.py](src/scoremodel_ext/malliavin/sde_nonlinear.py) の `approx` は先取り的 integrand に必要な Skorokhod correction を含まず、`mirafzali_full` も未検証の実験的実装である。多様体版の理論基準としては使わず、ネットワーク、データ管理、評価 harness を中心に再利用する。
 
 ### 4.10 Phase 3 の現行数値結果に関する注意

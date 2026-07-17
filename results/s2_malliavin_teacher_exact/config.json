@@ -1,0 +1,13 @@
+{
+  "n_paths": 64,
+  "n_steps": 8,
+  "time": 0.3,
+  "gamma_reg": 1e-06,
+  "heat_terms": 80,
+  "knn_k": 8,
+  "seed": 0,
+  "device": "cuda",
+  "dtype": "float64",
+  "no_vectorize_jacobian": false,
+  "outdir": "results/s2_malliavin_teacher_exact"
+}

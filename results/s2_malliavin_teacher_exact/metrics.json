@@ -1,0 +1,19 @@
+{
+  "covariance_regularization": 1e-06,
+  "device": "cuda",
+  "dtype": "float64",
+  "generation_seconds": 37.026287779212,
+  "knn_k": 8,
+  "max_endpoint_norm_error": 1.1102230246251565e-16,
+  "max_tangent_residual": 8.049116928532385e-16,
+  "mean_cosine_knn_vs_heat": 0.9688338443679326,
+  "mean_largest_covariance_eigenvalue": 0.31063600429990335,
+  "mean_score_weight_norm": 2.1553826592305803,
+  "mean_second_covariance_eigenvalue": 0.2645071434050301,
+  "mean_smallest_covariance_eigenvalue": 3.0402671369517743e-18,
+  "n_paths": 64,
+  "n_steps": 8,
+  "nan_rate": 0.0,
+  "rmse_knn_vs_heat": 0.5681847327722929,
+  "terminal_time": 0.3
+}
