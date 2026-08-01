@@ -17,6 +17,7 @@ import torch.nn as nn
 from .malliavin_teacher import (
     DiscreteMalliavinTeacher,
     discrete_malliavin_skorokhod_teacher,
+    tangent_malliavin_skorokhod_teacher,
 )
 
 
@@ -117,6 +118,29 @@ def s2_grw_endpoint(
     return x
 
 
+def s2_tangent_basis(endpoint: Tensor) -> Tensor:
+    """Orthonormal tangent basis for the sphere at ``endpoint``."""
+
+    endpoint = endpoint.reshape(3)
+    if torch.linalg.vector_norm(endpoint).item() < 1e-12:
+        raise ValueError("endpoint must be non-zero")
+    endpoint = endpoint / torch.linalg.vector_norm(endpoint)
+    tangent = torch.tensor([1.0, 0.0, 0.0], dtype=endpoint.dtype, device=endpoint.device)
+    if abs(float(torch.dot(endpoint, tangent))) > 0.9:
+        tangent = torch.tensor([0.0, 1.0, 0.0], dtype=endpoint.dtype, device=endpoint.device)
+    e1 = tangent - torch.dot(tangent, endpoint) * endpoint
+    e1 = e1 / torch.linalg.vector_norm(e1)
+    e2 = torch.cross(endpoint, e1)
+    return torch.stack((e1, e2), dim=1)
+
+
+def s2_reconstruct_score_vector(directional_scores: Tensor, endpoint: Tensor) -> Tensor:
+    """Reconstruct a tangent score from two directional components."""
+
+    basis = s2_tangent_basis(endpoint)
+    return basis @ directional_scores.reshape(2)
+
+
 def s2_projected_ambient_fields(endpoint: Tensor) -> Tensor:
     """Three redundant fields ``V_j(x)=P_x e_j`` spanning ``T_x S2``."""
 
@@ -149,6 +173,44 @@ def s2_discrete_malliavin_teacher(
         standard_noise,
         s2_projected_ambient_fields,
         field_divergence_fn=s2_projected_ambient_field_divergence,
+        covariance_regularization=covariance_regularization,
+        vectorize_jacobian=vectorize_jacobian,
+    )
+
+
+def s2_tangent_malliavin_teacher(
+    initial_point: Tensor,
+    standard_noise: Tensor,
+    terminal_time: float,
+    *,
+    field_index: int = 0,
+    covariance_regularization: float = 1e-6,
+    vectorize_jacobian: bool = True,
+) -> DiscreteMalliavinTeacher:
+    """Compute a tangent-space Malliavin teacher for one fixed field on S2."""
+
+    if not 0 <= field_index < 3:
+        raise ValueError("field_index must be in {0,1,2}")
+
+    endpoint_fn = lambda z: s2_grw_endpoint(initial_point, z, terminal_time)
+    tangent_basis_fn = lambda endpoint: s2_tangent_basis(endpoint)
+
+    def tangent_vector_field_fn(endpoint: Tensor) -> Tensor:
+        endpoint = endpoint.reshape(3)
+        basis_vector = torch.zeros(3, dtype=endpoint.dtype, device=endpoint.device)
+        basis_vector[field_index] = 1.0
+        return s2_projector(endpoint) @ basis_vector
+
+    def field_divergence_fn(endpoint: Tensor) -> Tensor:
+        endpoint = endpoint.reshape(3)
+        return -2.0 * endpoint[field_index]
+
+    return tangent_malliavin_skorokhod_teacher(
+        endpoint_fn,
+        standard_noise,
+        tangent_basis_fn,
+        tangent_vector_field_fn,
+        field_divergence_fn=field_divergence_fn,
         covariance_regularization=covariance_regularization,
         vectorize_jacobian=vectorize_jacobian,
     )

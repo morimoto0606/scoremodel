@@ -189,6 +189,31 @@ This is a research workspace optimized for:
 - reproducibility
 
 
+Recommended server-side numerical experiments
+-------------------------------------------
+
+For the manifold Malliavin extension, the easiest way to communicate the result is to use intuitive experiment names rather than raw theory labels.
+
+1. Earthquake experiment
+   - Fixed initial point on S².
+   - Use a short terminal time and a localized perturbation around the starting point.
+   - Goal: check whether the learned tangent-space score points in the correct direction and matches the heat-kernel / Varadhan reference.
+   - Why it is good: the physics is intuitive and the score field is easy to visualize.
+
+2. Fire experiment
+   - Start from a source point and compare the learned score field under a radial propagation setting.
+   - Goal: verify whether the reconstructed score captures outward/inward drift correctly and remains tangent to the manifold.
+   - Why it is good: it highlights the directionality of the score in a very interpretable way.
+
+3. Baseline comparison suite
+   - Run the same setup for three methods side by side:
+     - tangent-space Malliavin teacher
+     - existing De Bortoli-style teacher
+     - heat-kernel / Varadhan reference
+   - Goal: compare accuracy, tangency error, and stability under the same seeds and terminal times.
+
+These three experiments are enough to make the story readable: "Earthquake" for local sensitivity, "Fire" for directional propagation, and the comparison suite for method-level validation.
+
 Notes for future me
 -------------------
 

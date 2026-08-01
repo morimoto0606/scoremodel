@@ -85,6 +85,117 @@ def _jacobian(
     )
 
 
+def tangent_malliavin_skorokhod_teacher(
+    endpoint_fn: EndpointMap,
+    standard_noise: Tensor,
+    tangent_basis_fn: Callable[[Tensor], Tensor],
+    tangent_vector_field_fn: Callable[[Tensor], Tensor],
+    *,
+    field_divergence_fn: Optional[FieldDivergence] = None,
+    covariance_regularization: float = 1e-6,
+    reconstruction_rtol: float = 1e-7,
+    vectorize_jacobian: bool = True,
+) -> DiscreteMalliavinTeacher:
+    r"""Compute a tangent-space discrete Malliavin teacher.
+
+    The endpoint map ``F(Z)`` is assumed to live in a manifold embedded in
+    Euclidean space.  The tangent basis and vector field are projected onto the
+    tangent space of the endpoint before the finite-dimensional Malliavin
+    covariance is inverted.
+    """
+
+    if covariance_regularization <= 0:
+        raise ValueError("covariance_regularization must be positive")
+    if not standard_noise.is_floating_point():
+        raise TypeError("standard_noise must be a floating-point tensor")
+
+    noise_shape = standard_noise.shape
+    noise = standard_noise.detach().clone().requires_grad_(True)
+
+    def flat_endpoint(z: Tensor) -> Tensor:
+        return endpoint_fn(z.reshape(noise_shape)).reshape(-1)
+
+    def control_from_noise(z: Tensor) -> Tensor:
+        endpoint = flat_endpoint(z)
+        tangent_basis = tangent_basis_fn(endpoint)
+        if tangent_basis.ndim != 2:
+            raise ValueError("tangent_basis_fn must return a matrix")
+        if tangent_basis.shape[0] != endpoint.numel():
+            raise ValueError(
+                "tangent_basis_fn returned shape "
+                f"{tuple(tangent_basis.shape)}, expected first dimension {endpoint.numel()}"
+            )
+        ambient_field = tangent_vector_field_fn(endpoint).reshape(-1)
+        tangent_vector = tangent_basis.transpose(0, 1) @ ambient_field
+        endpoint_jacobian = _jacobian(
+            flat_endpoint,
+            z,
+            create_graph=True,
+            vectorize=vectorize_jacobian,
+        ).reshape(endpoint.numel(), z.numel())
+        tangent_jacobian = tangent_basis.transpose(0, 1) @ endpoint_jacobian
+        covariance = tangent_jacobian @ tangent_jacobian.transpose(0, 1)
+        covariance = 0.5 * (covariance + covariance.transpose(0, 1))
+        eye = torch.eye(
+            covariance.shape[0],
+            dtype=covariance.dtype,
+            device=covariance.device,
+        )
+        coefficients = torch.linalg.solve(
+            covariance + covariance_regularization * eye,
+            tangent_vector.reshape(-1, 1),
+        ).reshape(-1)
+        return tangent_jacobian.transpose(0, 1) @ coefficients
+
+    z_flat = noise.reshape(-1)
+    endpoint = flat_endpoint(z_flat)
+    tangent_basis = tangent_basis_fn(endpoint)
+    if tangent_basis.ndim != 2:
+        raise ValueError("tangent_basis_fn must return a matrix")
+    if tangent_basis.shape[0] != endpoint.numel():
+        raise ValueError(
+            "tangent_basis_fn returned shape "
+            f"{tuple(tangent_basis.shape)}, expected first dimension {endpoint.numel()}"
+        )
+    covering = control_from_noise(z_flat)
+
+    covering_jacobian = _jacobian(
+        control_from_noise,
+        z_flat,
+        create_graph=False,
+        vectorize=vectorize_jacobian,
+    ).reshape(z_flat.numel(), z_flat.numel())
+    covering_divergence = torch.diagonal(covering_jacobian).sum()
+
+    gaussian_pairing = covering.transpose(0, 1) @ z_flat
+    skorokhod = gaussian_pairing - covering_divergence
+
+    if field_divergence_fn is None:
+        field_divergence = torch.zeros_like(skorokhod)
+    else:
+        field_divergence = field_divergence_fn(endpoint).reshape(-1)
+        if field_divergence.shape != skorokhod.shape:
+            raise ValueError(
+                "field_divergence_fn returned shape "
+                f"{tuple(field_divergence.shape)}, expected {tuple(skorokhod.shape)}"
+            )
+
+    directional_score_weight = -skorokhod - field_divergence
+    score_weight = tangent_basis @ directional_score_weight.reshape(-1, 1)
+    score_weight = score_weight.reshape(-1)
+
+    return DiscreteMalliavinTeacher(
+        endpoint=endpoint,
+        endpoint_jacobian=endpoint_jacobian,
+        covariance=covariance,
+        covariance_eigenvalues=torch.linalg.eigvalsh(covariance),
+        covering=covering,
+        skorokhod=skorokhod,
+        directional_score_weight=directional_score_weight,
+        score_weight=score_weight,
+    )
+
+
 def discrete_malliavin_skorokhod_teacher(
     endpoint_fn: EndpointMap,
     standard_noise: Tensor,
