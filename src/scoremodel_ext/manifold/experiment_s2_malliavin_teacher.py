@@ -86,7 +86,7 @@ def generate_s2_teacher_dataset(
         skorokhod.append(teacher.skorokhod.detach())
         covariance_eigenvalues.append(teacher.covariance_eigenvalues.detach())
 
-    return {
+    dataset = {
         "initial_point": x0.detach(),
         "time": torch.full((n_paths,), terminal_time, dtype=dtype, device=device),
         "noise": torch.stack(noises),
@@ -96,6 +96,10 @@ def generate_s2_teacher_dataset(
         "directional_score_weight": torch.stack(directional_weights),
         "skorokhod": torch.stack(skorokhod),
         "covariance_eigenvalues": torch.stack(covariance_eigenvalues),
+    }
+    return {
+        key: value.detach() if isinstance(value, torch.Tensor) else value
+        for key, value in dataset.items()
     }
 
 
@@ -148,7 +152,7 @@ def generate_s2_marginal_teacher_dataset(
         score_weights.append(teacher.score_weight.detach())
         eigenvalues.append(teacher.covariance_eigenvalues.detach())
 
-    return {
+    dataset = {
         "initial_point": normalized_initial.detach(),
         "time": terminal_times.detach(),
         "noise": torch.stack(noises),
@@ -157,6 +161,10 @@ def generate_s2_marginal_teacher_dataset(
         "score_target": torch.stack(score_weights),
         "score_weight": torch.stack(score_weights),
         "covariance_eigenvalues": torch.stack(eigenvalues),
+    }
+    return {
+        key: value.detach() if isinstance(value, torch.Tensor) else value
+        for key, value in dataset.items()
     }
 
 
@@ -214,7 +222,10 @@ def generate_s2_mixture_marginal_teacher_dataset(
         vectorize_jacobian=vectorize_jacobian,
     )
     dataset["component_index"] = component_index
-    return dataset
+    return {
+        key: value.detach() if isinstance(value, torch.Tensor) else value
+        for key, value in dataset.items()
+    }
 
 
 def generate_s2_fixed_start_marginal_teacher_dataset(
@@ -279,10 +290,13 @@ def train_s2_marginal_score(
     missing = required.difference(dataset)
     if missing:
         raise KeyError(f"dataset is missing fields: {sorted(missing)}")
+    time = dataset["time"].detach()
+    endpoint = dataset["endpoint"].detach()
+    delta = dataset["skorokhod"].detach()
     result = train_mirafzali_skorokhod_net(
-        dataset["time"],
-        dataset["endpoint"],
-        dataset["skorokhod"],
+        time,
+        endpoint,
+        delta,
         n_epochs=n_epochs,
         batch_size=batch_size,
         lr=learning_rate,

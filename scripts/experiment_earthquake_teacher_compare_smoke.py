@@ -254,7 +254,10 @@ def build_teacher_dataset(
     }
     if teacher == "malliavin":
         dataset["skorokhod"] = torch.stack(skorokhod, dim=0)
-    return dataset
+    return {
+        key: value.detach() if isinstance(value, torch.Tensor) else value
+        for key, value in dataset.items()
+    }
 
 
 def evaluate_dataset_loss(

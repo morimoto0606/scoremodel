@@ -165,9 +165,12 @@ def train_mirafzali_skorokhod_net(
         target : delta_t(u_t)
         output : E[delta_t(u_t) | X_t]
     """
-    t = t.to(device)
-    x = x.to(device)
-    delta = delta.to(device)
+    # Algorithm-6 inputs are a fixed teacher dataset.  Detach them before
+    # constructing the normalization tensors so only the network parameters
+    # participate in each epoch's newly-created autograd graph.
+    t = t.detach().to(device)
+    x = x.detach().to(device)
+    delta = delta.detach().to(device)
 
     x_mean = x.mean(dim=0, keepdim=True)
     x_std = x.std(dim=0, keepdim=True).clamp_min(1e-6)

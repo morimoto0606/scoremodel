@@ -27,6 +27,7 @@ from scoremodel_ext.manifold.earthquake_adapter import (
 )
 from scoremodel_ext.manifold import earthquake_adapter as earthquake_adapter_module
 from scripts import reproduce_earthquake_s2_malliavin as earthquake_script
+from scripts import experiment_earthquake_teacher_compare_smoke as earthquake_smoke_script
 from scoremodel_ext.malliavin.models import MirafzaliSkorokhodNet
 from scoremodel_ext.manifold.malliavin_teacher import (
     discrete_malliavin_skorokhod_teacher,
@@ -112,6 +113,59 @@ def test_mirafzali_network_supports_distinct_input_and_teacher_dimensions():
     )
     output = network(torch.rand(3), torch.rand(3, 5))
     assert output.shape == (3, 2)
+
+
+def test_earthquake_malliavin_dataset_can_train_for_multiple_epochs():
+    initial_points = torch.tensor(
+        [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0]],
+        dtype=DTYPE,
+    )
+    times = torch.tensor([0.1, 0.2], dtype=DTYPE)
+    noises = torch.tensor(
+        [
+            [[0.2, -0.1, 0.3], [0.1, 0.4, -0.2]],
+            [[-0.3, 0.2, 0.1], [0.4, -0.2, 0.3]],
+        ],
+        dtype=DTYPE,
+    )
+    dataset = earthquake_smoke_script.build_teacher_dataset(
+        initial_points=initial_points,
+        times=times,
+        noises=noises,
+        teacher="malliavin",
+        covariance_regularization=1e-8,
+        heat_terms=30,
+    )
+
+    assert all(
+        not value.requires_grad
+        for value in dataset.values()
+        if isinstance(value, torch.Tensor)
+    )
+
+    model, history = train_s2_marginal_score(
+        dataset,
+        n_epochs=2,
+        batch_size=2,
+        learning_rate=1e-3,
+        weight_decay=0.0,
+        hidden=16,
+        n_blocks=1,
+        num_frequencies=4,
+        device="cpu",
+        return_history=True,
+    )
+
+    assert len(history["train_loss"]) == 2
+    assert all(math.isfinite(loss) for loss in history["train_loss"])
+    gradients = [
+        parameter.grad
+        for parameter in model.parameters()
+        if parameter.requires_grad and parameter.grad is not None
+    ]
+    assert gradients
+    assert all(torch.isfinite(gradient).all() for gradient in gradients)
+    assert any(bool((gradient != 0).any()) for gradient in gradients)
 
 
 def test_euclidean_additive_noise_recovers_exact_path_weight():
