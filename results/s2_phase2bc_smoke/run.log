@@ -1,0 +1,19 @@
+artifact paths
+teacher_dataset: /home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/teacher_dataset.pt
+model: /home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/model.pt
+training_history: /home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/training_history.json
+reverse_samples: /home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/reverse_samples.pt
+metrics: /home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/metrics.json
+run_config: /home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/run_config.json
+{
+  "teacher_dataset_generated": true,
+  "time_in_range": true,
+  "initial_point_fixed": true,
+  "score_target_finite": true,
+  "training_loss_finite": true,
+  "model_saved": true,
+  "reverse_heat_completed": true,
+  "reverse_varadhan_completed": true,
+  "reverse_trained_completed": true,
+  "generated_samples_near_unit_sphere": true
+}

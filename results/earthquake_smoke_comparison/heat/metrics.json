@@ -1,0 +1,21 @@
+{
+  "teacher": "heat",
+  "training_path": "direct_score",
+  "initial_train_loss": 1.005540376938832,
+  "final_train_loss": 0.9824317410274461,
+  "best_train_loss": 0.9824317410274461,
+  "validation_loss": 4.261477265093347,
+  "teacher_generation_seconds": 7.970667611807585,
+  "training_seconds": 2.027621801942587,
+  "reverse_sampling_seconds": 2.3893509320914745,
+  "s2_rbf_mmd": 0.09633099561642855,
+  "nearest_neighbor_geodesic_mean": 0.3437666753261658,
+  "nearest_neighbor_geodesic_median": 0.27471200123473505,
+  "nearest_neighbor_geodesic_max": 1.079900046574046,
+  "generated_sample_norm_error": 9.974659986866641e-18,
+  "nan_rate": 0.0,
+  "generated_all_finite": true,
+  "generated_sample_count": 256,
+  "device": "cuda",
+  "dtype": "float64"
+}

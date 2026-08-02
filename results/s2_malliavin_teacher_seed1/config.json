@@ -1,0 +1,16 @@
+{
+  "n_paths": 1024,
+  "n_steps": 16,
+  "terminal_time": 0.3,
+  "covariance_regularization": 1e-06,
+  "heat_terms": 80,
+  "knn_k": 16,
+  "reverse_steps": 100,
+  "visual_paths": 256,
+  "seed": 1,
+  "device": "cuda",
+  "dtype": "float64",
+  "no_vectorize_jacobian": false,
+  "output_dir": "results/s2_malliavin_teacher_seed1",
+  "resolved_device": "cuda"
+}

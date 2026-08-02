@@ -1,0 +1,13 @@
+{
+  "epochs": [
+    1000
+  ],
+  "train_loss": [
+    0.00735082606157813
+  ],
+  "validation_loss": [
+    0.6732859876978807
+  ],
+  "final_train_loss": 0.00735082606157813,
+  "final_validation_loss": 0.6732859876978807
+}

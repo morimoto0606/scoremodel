@@ -1,0 +1,6 @@
+X connection to localhost:10.0 broken (explicit kill or server shutdown).
+ore-sde/data/quakes_all.csv
+[2026-08-02 17:48:21] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-02 17:48:33] teacher=heat training_path=direct_score
+[2026-08-02 17:48:33] final_train_loss=9.824317e-01 validation_loss=4.261477e+00
+[2026-08-02 17:48:33] mmd=9.633100e-02 geodesic_mean=3.437667e-01 norm_error=9.974660e-18

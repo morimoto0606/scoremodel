@@ -157,6 +157,7 @@ def train_mirafzali_skorokhod_net(
     n_blocks=6,
     num_frequencies=16,
     device="cuda",
+    return_history=False,
 ):
     """
     Algorithm 6 style:
@@ -194,6 +195,11 @@ def train_mirafzali_skorokhod_net(
     n = x.shape[0]
     best_loss = float("inf")
     best_state = None
+    history_epochs = []
+    history_train_loss = []
+
+    with torch.no_grad():
+        initial_full_loss = F.mse_loss(net(t_n, x_n), y_n).item()
 
     for ep in range(1, n_epochs + 1):
         idx = torch.randint(0, n, (batch_size,), device=device)
@@ -205,6 +211,15 @@ def train_mirafzali_skorokhod_net(
         torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
         opt.step()
 
+        if return_history:
+            with torch.no_grad():
+                full_loss = F.mse_loss(net(t_n, x_n), y_n).item()
+            history_epochs.append(ep)
+            history_train_loss.append(full_loss)
+            if full_loss < best_loss:
+                best_loss = full_loss
+                best_state = {k: v.detach().cpu().clone() for k, v in net.state_dict().items()}
+
         if ep % 500 == 0:
             with torch.no_grad():
                 # validation proxy on random subset to avoid huge full pass
@@ -212,7 +227,7 @@ def train_mirafzali_skorokhod_net(
                 vpred = net(t_n[vidx], x_n[vidx])
                 vloss = F.mse_loss(vpred, y_n[vidx]).item()
 
-            if vloss < best_loss:
+            if (not return_history) and vloss < best_loss:
                 best_loss = vloss
                 best_state = {k: v.detach().cpu().clone() for k, v in net.state_dict().items()}
                 print(f"  *** mirafzali best updated: {best_loss:.6e}")
@@ -236,4 +251,14 @@ def train_mirafzali_skorokhod_net(
         y_std.detach(),
     ).to(device)
 
-    return wrapped
+    if not return_history:
+        return wrapped
+
+    history = {
+        "epochs": history_epochs,
+        "train_loss": history_train_loss,
+        "initial_train_loss": float(initial_full_loss),
+        "final_train_loss": float(history_train_loss[-1] if history_train_loss else initial_full_loss),
+        "best_train_loss": float(best_loss),
+    }
+    return wrapped, history

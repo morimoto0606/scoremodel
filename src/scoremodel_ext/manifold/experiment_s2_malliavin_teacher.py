@@ -271,6 +271,7 @@ def train_s2_marginal_score(
     n_blocks: int = 6,
     num_frequencies: int = 16,
     device: str = "cuda",
+    return_history: bool = False,
 ) -> S2SkorokhodScoreModel:
     """Train Mirafzali Algorithm 6 and return an intrinsic S2 score model."""
 
@@ -278,7 +279,7 @@ def train_s2_marginal_score(
     missing = required.difference(dataset)
     if missing:
         raise KeyError(f"dataset is missing fields: {sorted(missing)}")
-    delta_model = train_mirafzali_skorokhod_net(
+    result = train_mirafzali_skorokhod_net(
         dataset["time"],
         dataset["endpoint"],
         dataset["skorokhod"],
@@ -290,8 +291,12 @@ def train_s2_marginal_score(
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
         device=device,
+        return_history=return_history,
     )
-    return S2SkorokhodScoreModel(delta_model)
+    if return_history:
+        delta_model, history = result
+        return S2SkorokhodScoreModel(delta_model), history
+    return S2SkorokhodScoreModel(result)
 
 
 def train_s2_score_model(
@@ -305,6 +310,7 @@ def train_s2_score_model(
     n_blocks: int = 6,
     num_frequencies: int = 16,
     device: str = "cuda",
+    return_history: bool = False,
 ):
     """Train a direct S2 score regressor with the same architecture and optimizer."""
 
@@ -324,6 +330,7 @@ def train_s2_score_model(
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
         device=device,
+        return_history=return_history,
     )
 
 

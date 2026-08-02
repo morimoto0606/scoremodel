@@ -1,0 +1,101 @@
+experiment start
+device: cuda
+dtype: float64
+seed: 0
+n_paths: 128
+n_steps: 16
+terminal_time: 0.3
+dataset generation start
+dataset generation completed
+metric computation start
+metric computation completed
+artifact paths
+teacher_dataset: results/s2_malliavin_teacher_npaths_128/teacher_dataset.pt
+metrics: results/s2_malliavin_teacher_npaths_128/metrics.json
+run_config: results/s2_malliavin_teacher_npaths_128/run_config.json
+total elapsed seconds: 208.443904
+{
+  "covariance_regularization": 1e-06,
+  "device": "cuda",
+  "dtype": "float64",
+  "generation_seconds": 206.07933110371232,
+  "geodesic_bins": [
+    {
+      "count": 33,
+      "end_degrees": 26.30434840242712,
+      "end_radians": 0.4590974872140636,
+      "malliavin_vs_heat_mean_cosine": 0.9546068481173173,
+      "malliavin_vs_heat_rmse": 0.17459916842985693,
+      "malliavin_vs_varadhan_mean_cosine": 0.9546068481173173,
+      "malliavin_vs_varadhan_rmse": 0.16895042238184843,
+      "start_degrees": 0.0,
+      "start_radians": 0.0,
+      "varadhan_vs_heat_mean_cosine": 1.0,
+      "varadhan_vs_heat_rmse": 0.031079138837663715
+    },
+    {
+      "count": 67,
+      "end_degrees": 52.60869680485424,
+      "end_radians": 0.9181949744281273,
+      "malliavin_vs_heat_mean_cosine": 0.9917001046315014,
+      "malliavin_vs_heat_rmse": 0.24421420780212888,
+      "malliavin_vs_varadhan_mean_cosine": 0.9917001046315014,
+      "malliavin_vs_varadhan_rmse": 0.28288912385787646,
+      "start_degrees": 26.30434840242712,
+      "start_radians": 0.4590974872140636,
+      "varadhan_vs_heat_mean_cosine": 1.0,
+      "varadhan_vs_heat_rmse": 0.06890064186375484
+    },
+    {
+      "count": 24,
+      "end_degrees": 78.91304520728136,
+      "end_radians": 1.3772924616421909,
+      "malliavin_vs_heat_mean_cosine": 0.9778730272889284,
+      "malliavin_vs_heat_rmse": 0.6430731045724885,
+      "malliavin_vs_varadhan_mean_cosine": 0.9778730272889284,
+      "malliavin_vs_varadhan_rmse": 0.7443883068790582,
+      "start_degrees": 52.60869680485424,
+      "start_radians": 0.9181949744281273,
+      "varadhan_vs_heat_mean_cosine": 1.0,
+      "varadhan_vs_heat_rmse": 0.11875033054808899
+    },
+    {
+      "count": 4,
+      "end_degrees": 105.21739360970848,
+      "end_radians": 1.8363899488562545,
+      "malliavin_vs_heat_mean_cosine": 0.8252589183641612,
+      "malliavin_vs_heat_rmse": 1.831704528960104,
+      "malliavin_vs_varadhan_mean_cosine": 0.8252589183641612,
+      "malliavin_vs_varadhan_rmse": 2.0031383764475366,
+      "start_degrees": 78.91304520728136,
+      "start_radians": 1.3772924616421909,
+      "varadhan_vs_heat_mean_cosine": 1.0,
+      "varadhan_vs_heat_rmse": 0.1924655622907618
+    }
+  ],
+  "heat_terms": 80,
+  "knn_k": 16,
+  "malliavin_vs_heat_mean_cosine": 0.9743431353638516,
+  "malliavin_vs_heat_rmse": 0.4706006622473057,
+  "malliavin_vs_varadhan_mean_cosine": 0.9743431353638516,
+  "malliavin_vs_varadhan_rmse": 0.5277658359018979,
+  "max_endpoint_norm_error": 2.220446049250313e-16,
+  "max_geodesic_distance": 1.8363899488562545,
+  "max_tangent_residual": 8.881784197001252e-16,
+  "mean_cosine_knn_vs_heat": 0.9743431353638516,
+  "mean_geodesic_distance": 0.6835148099869286,
+  "mean_largest_covariance_eigenvalue": 0.3023234003958641,
+  "mean_score_weight_norm": 2.3553174482171135,
+  "mean_second_covariance_eigenvalue": 0.27458290793360685,
+  "mean_smallest_covariance_eigenvalue": -4.821929418863242e-18,
+  "metric_seconds": 2.3644895888864994,
+  "n_paths": 128,
+  "n_steps": 16,
+  "nan_rate": 0.0,
+  "rmse_knn_vs_heat": 0.4706006622473057,
+  "seed": 0,
+  "terminal_time": 0.3,
+  "total_seconds": 208.44390400499105,
+  "varadhan_vs_heat_mean_cosine": 1.0,
+  "varadhan_vs_heat_rmse": 0.08084299384245461
+}

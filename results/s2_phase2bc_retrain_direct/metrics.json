@@ -1,0 +1,109 @@
+{
+  "training_target": "direct_score",
+  "dataset": {
+    "n_paths": 256,
+    "validation_n_paths": 256,
+    "n_steps": 8,
+    "minimum_time": 0.05,
+    "maximum_time": 0.3,
+    "covariance_regularization": 1e-06,
+    "training_seed": 0,
+    "validation_seed": 1,
+    "checks": {
+      "time_min": 0.05045896661453131,
+      "time_max": 0.29967645858510816,
+      "time_in_range": true,
+      "initial_point_fixed": true,
+      "score_target_all_finite": true
+    },
+    "training_dataset_path": "/home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_smoke/teacher_dataset.pt",
+    "validation_dataset_path": "/home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_retrain_skorokhod/validation_dataset.pt",
+    "train_dataset_loaded": true,
+    "validation_dataset_loaded": true
+  },
+  "training": {
+    "epochs": 1000,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "hidden": 128,
+    "n_blocks": 3,
+    "num_frequencies": 16,
+    "train_loss": 0.0037415409444490886,
+    "validation_loss": 0.6958223757609759,
+    "heat_score_mse": 0.44745394130812804,
+    "heat_score_mean_cosine": 0.9461275031042355,
+    "max_tangent_residual": 2.178023154111667,
+    "target_key": "score_target"
+  },
+  "reverse": {
+    "terminal_time": 0.3,
+    "minimum_time": 0.05,
+    "reverse_steps": 32,
+    "n_generated_samples": 256,
+    "reverse_seed": 0,
+    "evaluation_note": "All reverse distance metrics are measured at reverse minimum time, not at t=0.",
+    "by_method": {
+      "heat": {
+        "mean_geodesic_distance_to_initial": 0.23000152341456934,
+        "median_geodesic_distance_to_initial": 0.21627968818913385,
+        "rmse_geodesic_distance_to_initial": 0.2566005862245907,
+        "max_geodesic_distance_to_initial": 0.5727705009974058,
+        "max_norm_error": 1.1102230246251565e-16,
+        "pairwise_mean_geodesic_distance": 0.31882010017231055
+      },
+      "varadhan": {
+        "mean_geodesic_distance_to_initial": 0.22850896817417565,
+        "median_geodesic_distance_to_initial": 0.21461998283130124,
+        "rmse_geodesic_distance_to_initial": 0.2548508708178889,
+        "max_geodesic_distance_to_initial": 0.5679072522258006,
+        "max_norm_error": 1.1102230246251565e-16,
+        "pairwise_mean_geodesic_distance": 0.31670666424007876
+      },
+      "trained_malliavin": {
+        "mean_geodesic_distance_to_initial": 0.2980150722983741,
+        "median_geodesic_distance_to_initial": 0.2728515611207301,
+        "rmse_geodesic_distance_to_initial": 0.33900253787673656,
+        "max_geodesic_distance_to_initial": 1.1347731708576747,
+        "max_norm_error": 1.1102230246251565e-16,
+        "pairwise_mean_geodesic_distance": 0.4132940121487505
+      }
+    },
+    "pairwise_between_methods": {
+      "heat": {
+        "varadhan": 0.0029507887540718846,
+        "trained_malliavin": 0.08825684245725161
+      },
+      "varadhan": {
+        "trained_malliavin": 0.09066744004031482
+      },
+      "trained_malliavin": {}
+    }
+  },
+  "timing_seconds": {
+    "dataset_generation": 0.0,
+    "validation_dataset_generation": 0.0,
+    "training": 11.702722921967506,
+    "reverse": 230.1216656267643,
+    "total": 252.48272049054503
+  },
+  "training_seed": 0,
+  "validation_seed": 1,
+  "reverse_seed": 0,
+  "validation_n_paths": 256,
+  "reverse_minimum_time": 0.05,
+  "reverse_terminal_time": 0.3,
+  "terminal_samples_path": "/home/export/home/ymorimoto/github/scoremodel/results/s2_phase2bc_retrain_skorokhod/terminal_samples.pt",
+  "smoke_completion_checks": {
+    "teacher_dataset_generated": true,
+    "time_in_range": true,
+    "initial_point_fixed": true,
+    "score_target_finite": true,
+    "training_loss_finite": true,
+    "model_saved": true,
+    "reverse_heat_completed": true,
+    "reverse_varadhan_completed": true,
+    "reverse_trained_completed": true,
+    "generated_samples_near_unit_sphere": true
+  }
+}
