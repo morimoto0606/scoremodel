@@ -1,18 +1,5 @@
-[2026-08-02 18:06:59] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
-[2026-08-02 18:06:59] split indices ready: train_indices.pt, validation_indices.pt
-Traceback (most recent call last):
-  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 578, in <module>
-    main()
-  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 421, in main
-    model, history = train_s2_marginal_score(
-  File "/home/export/home/ymorimoto/github/scoremodel/src/scoremodel_ext/manifold/experiment_s2_malliavin_teacher.py", line 282, in train_s2_marginal_score
-    result = train_mirafzali_skorokhod_net(
-  File "/home/export/home/ymorimoto/github/scoremodel/src/scoremodel_ext/malliavin/models.py", line 210, in train_mirafzali_skorokhod_net
-    loss.backward()
-  File "/home/export/home/ymorimoto/github/scoremodel/.venv/lib/python3.10/site-packages/torch/_tensor.py", line 626, in backward
-    torch.autograd.backward(
-  File "/home/export/home/ymorimoto/github/scoremodel/.venv/lib/python3.10/site-packages/torch/autograd/__init__.py", line 347, in backward
-    _engine_run_backward(
-  File "/home/export/home/ymorimoto/github/scoremodel/.venv/lib/python3.10/site-packages/torch/autograd/graph.py", line 823, in _engine_run_backward
-    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
-RuntimeError: Trying to backward through the graph a second time (or directly access saved tensors after they have already been freed). Saved intermediate values of the graph are freed when you call .backward() or autograd.grad(). Specify retain_graph=True if you need to backward through the graph a second time or if you need to access saved tensors after calling backward.
+[2026-08-02 18:32:27] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-02 18:32:27] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-02 18:36:45] teacher=malliavin training_path=marginal_skorokhod
+[2026-08-02 18:36:45] final_train_loss=9.612087e-01 validation_loss=5.651620e+00
+[2026-08-02 18:36:45] mmd=1.226508e-01 geodesic_mean=3.596141e-01 norm_error=1.214306e-17
