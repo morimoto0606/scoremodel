@@ -9,7 +9,7 @@ correction without using the additive-noise formula of Mirafzali et al.
 from __future__ import annotations
 
 import math
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -130,15 +130,20 @@ def s2_tangent_basis(endpoint: Tensor) -> Tensor:
         tangent = torch.tensor([0.0, 1.0, 0.0], dtype=endpoint.dtype, device=endpoint.device)
     e1 = tangent - torch.dot(tangent, endpoint) * endpoint
     e1 = e1 / torch.linalg.vector_norm(e1)
-    e2 = torch.cross(endpoint, e1)
+    e2 = torch.linalg.cross(endpoint, e1)
     return torch.stack((e1, e2), dim=1)
 
 
 def s2_reconstruct_score_vector(directional_scores: Tensor, endpoint: Tensor) -> Tensor:
-    """Reconstruct a tangent score from two directional components."""
+    """Reconstruct a tangent score from tangent-basis or projected-field weights."""
 
+    endpoint = endpoint.reshape(3)
+    directional_scores = directional_scores.reshape(-1)
     basis = s2_tangent_basis(endpoint)
-    return basis @ directional_scores.reshape(2)
+    if directional_scores.numel() == basis.shape[1]:
+        return basis @ directional_scores
+    fields = s2_projected_ambient_fields(endpoint)
+    return torch.linalg.pinv(fields.transpose(0, 1), rtol=1e-7) @ directional_scores
 
 
 def s2_projected_ambient_fields(endpoint: Tensor) -> Tensor:
@@ -183,33 +188,41 @@ def s2_tangent_malliavin_teacher(
     standard_noise: Tensor,
     terminal_time: float,
     *,
-    field_index: int = 0,
+    field_index: Optional[int] = None,
     covariance_regularization: float = 1e-6,
     vectorize_jacobian: bool = True,
 ) -> DiscreteMalliavinTeacher:
-    """Compute a tangent-space Malliavin teacher for one fixed field on S2."""
+    """Compute a tangent-space Malliavin teacher on S2.
 
-    if not 0 <= field_index < 3:
+    When ``field_index`` is omitted, the teacher uses the three projected
+    ambient coordinate fields ``P_x e_i`` simultaneously.
+    """
+
+    if field_index is not None and not 0 <= field_index < 3:
         raise ValueError("field_index must be in {0,1,2}")
 
     endpoint_fn = lambda z: s2_grw_endpoint(initial_point, z, terminal_time)
     tangent_basis_fn = lambda endpoint: s2_tangent_basis(endpoint)
 
-    def tangent_vector_field_fn(endpoint: Tensor) -> Tensor:
+    def target_fields_fn(endpoint: Tensor) -> Tensor:
         endpoint = endpoint.reshape(3)
-        basis_vector = torch.zeros(3, dtype=endpoint.dtype, device=endpoint.device)
-        basis_vector[field_index] = 1.0
-        return s2_projector(endpoint) @ basis_vector
+        projected_fields = s2_projector(endpoint)
+        if field_index is None:
+            return projected_fields
+        return projected_fields[:, field_index]
 
     def field_divergence_fn(endpoint: Tensor) -> Tensor:
         endpoint = endpoint.reshape(3)
-        return -2.0 * endpoint[field_index]
+        divergences = -2.0 * endpoint
+        if field_index is None:
+            return divergences
+        return divergences[field_index]
 
     return tangent_malliavin_skorokhod_teacher(
         endpoint_fn,
         standard_noise,
         tangent_basis_fn,
-        tangent_vector_field_fn,
+        target_fields_fn,
         field_divergence_fn=field_divergence_fn,
         covariance_regularization=covariance_regularization,
         vectorize_jacobian=vectorize_jacobian,

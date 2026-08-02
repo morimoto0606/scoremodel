@@ -43,9 +43,17 @@ class DiscreteMalliavinTeacher:
         Discrete Malliavin covariance ``J J^T``.
     covariance_eigenvalues:
         Eigenvalues of the symmetrised covariance, useful for diagnostics.
+    condition_number:
+        Spectral condition number of the symmetrised covariance.
     covering:
         Minimum-energy regularised controls, shape
         ``[noise_dim, n_fields]``.
+    right_inverse_residual:
+        Residual norms for ``J U = V`` after regularised inversion.
+    gaussian_pairing:
+        Gaussian pairing term ``U^T Z`` for each field.
+    divergence_term:
+        Divergence term ``div_Z U`` for each field.
     skorokhod:
         Directional Skorokhod integrals ``delta(u^a)``.
     directional_score_weight:
@@ -61,10 +69,27 @@ class DiscreteMalliavinTeacher:
     endpoint_jacobian: Tensor
     covariance: Tensor
     covariance_eigenvalues: Tensor
+    condition_number: Tensor
     covering: Tensor
+    right_inverse_residual: Tensor
+    gaussian_pairing: Tensor
+    divergence_term: Tensor
     skorokhod: Tensor
     directional_score_weight: Tensor
     score_weight: Tensor
+
+
+def _symmetrize(matrix: Tensor) -> Tensor:
+    return 0.5 * (matrix + matrix.transpose(0, 1))
+
+
+def _condition_number_from_eigenvalues(eigenvalues: Tensor) -> Tensor:
+    absolute = eigenvalues.abs()
+    largest = absolute.max()
+    smallest = absolute.min()
+    if bool((smallest <= 0).detach().cpu()):
+        return torch.full_like(largest, float("inf"))
+    return largest / smallest
 
 
 def _jacobian(
@@ -89,7 +114,7 @@ def tangent_malliavin_skorokhod_teacher(
     endpoint_fn: EndpointMap,
     standard_noise: Tensor,
     tangent_basis_fn: Callable[[Tensor], Tensor],
-    tangent_vector_field_fn: Callable[[Tensor], Tensor],
+    target_fields_fn: Callable[[Tensor], Tensor],
     *,
     field_divergence_fn: Optional[FieldDivergence] = None,
     covariance_regularization: float = 1e-6,
@@ -99,8 +124,8 @@ def tangent_malliavin_skorokhod_teacher(
     r"""Compute a tangent-space discrete Malliavin teacher.
 
     The endpoint map ``F(Z)`` is assumed to live in a manifold embedded in
-    Euclidean space.  The tangent basis and vector field are projected onto the
-    tangent space of the endpoint before the finite-dimensional Malliavin
+    Euclidean space.  The tangent basis and endpoint vector fields are
+    projected onto the tangent space before the finite-dimensional Malliavin
     covariance is inverted.
     """
 
@@ -115,7 +140,7 @@ def tangent_malliavin_skorokhod_teacher(
     def flat_endpoint(z: Tensor) -> Tensor:
         return endpoint_fn(z.reshape(noise_shape)).reshape(-1)
 
-    def control_from_noise(z: Tensor) -> Tensor:
+    def _prepare_tangent_state(z: Tensor, *, create_graph: bool):
         endpoint = flat_endpoint(z)
         tangent_basis = tangent_basis_fn(endpoint)
         if tangent_basis.ndim != 2:
@@ -125,17 +150,20 @@ def tangent_malliavin_skorokhod_teacher(
                 "tangent_basis_fn returned shape "
                 f"{tuple(tangent_basis.shape)}, expected first dimension {endpoint.numel()}"
             )
-        ambient_field = tangent_vector_field_fn(endpoint).reshape(-1)
-        tangent_vector = tangent_basis.transpose(0, 1) @ ambient_field
+        ambient_fields = target_fields_fn(endpoint).reshape(endpoint.numel(), -1)
+        tangent_fields = tangent_basis.transpose(0, 1) @ ambient_fields
         endpoint_jacobian = _jacobian(
             flat_endpoint,
             z,
-            create_graph=True,
+            create_graph=create_graph,
             vectorize=vectorize_jacobian,
         ).reshape(endpoint.numel(), z.numel())
         tangent_jacobian = tangent_basis.transpose(0, 1) @ endpoint_jacobian
+        return endpoint, tangent_basis, tangent_fields, endpoint_jacobian, tangent_jacobian
+
+    def _covering_from_tangent_state(tangent_jacobian: Tensor, tangent_fields: Tensor) -> Tensor:
         covariance = tangent_jacobian @ tangent_jacobian.transpose(0, 1)
-        covariance = 0.5 * (covariance + covariance.transpose(0, 1))
+        covariance = _symmetrize(covariance)
         eye = torch.eye(
             covariance.shape[0],
             dtype=covariance.dtype,
@@ -143,29 +171,40 @@ def tangent_malliavin_skorokhod_teacher(
         )
         coefficients = torch.linalg.solve(
             covariance + covariance_regularization * eye,
-            tangent_vector.reshape(-1, 1),
-        ).reshape(-1)
+            tangent_fields,
+        )
         return tangent_jacobian.transpose(0, 1) @ coefficients
 
-    z_flat = noise.reshape(-1)
-    endpoint = flat_endpoint(z_flat)
-    tangent_basis = tangent_basis_fn(endpoint)
-    if tangent_basis.ndim != 2:
-        raise ValueError("tangent_basis_fn must return a matrix")
-    if tangent_basis.shape[0] != endpoint.numel():
-        raise ValueError(
-            "tangent_basis_fn returned shape "
-            f"{tuple(tangent_basis.shape)}, expected first dimension {endpoint.numel()}"
+    def covering_from_noise(z: Tensor) -> Tensor:
+        _, _, tangent_fields, _, tangent_jacobian = _prepare_tangent_state(
+            z,
+            create_graph=True,
         )
-    covering = control_from_noise(z_flat)
+        return _covering_from_tangent_state(tangent_jacobian, tangent_fields)
+
+    z_flat = noise.reshape(-1)
+    (
+        endpoint,
+        tangent_basis,
+        tangent_fields,
+        endpoint_jacobian,
+        tangent_jacobian,
+    ) = _prepare_tangent_state(z_flat, create_graph=False)
+    covariance = tangent_jacobian @ tangent_jacobian.transpose(0, 1)
+    covariance = _symmetrize(covariance)
+    covariance_eigenvalues = torch.linalg.eigvalsh(covariance)
+    covering = _covering_from_tangent_state(tangent_jacobian, tangent_fields)
 
     covering_jacobian = _jacobian(
-        control_from_noise,
+        covering_from_noise,
         z_flat,
         create_graph=False,
         vectorize=vectorize_jacobian,
-    ).reshape(z_flat.numel(), z_flat.numel())
-    covering_divergence = torch.diagonal(covering_jacobian).sum()
+    ).reshape(z_flat.numel(), tangent_fields.shape[1], z_flat.numel())
+    diagonal_indices = torch.arange(z_flat.numel(), device=z_flat.device)
+    covering_divergence = covering_jacobian[
+        diagonal_indices, :, diagonal_indices
+    ].sum(dim=0)
 
     gaussian_pairing = covering.transpose(0, 1) @ z_flat
     skorokhod = gaussian_pairing - covering_divergence
@@ -181,15 +220,25 @@ def tangent_malliavin_skorokhod_teacher(
             )
 
     directional_score_weight = -skorokhod - field_divergence
-    score_weight = tangent_basis @ directional_score_weight.reshape(-1, 1)
-    score_weight = score_weight.reshape(-1)
+    tangent_score_weight = torch.linalg.pinv(
+        tangent_fields.transpose(0, 1), rtol=reconstruction_rtol
+    ) @ directional_score_weight
+    score_weight = tangent_basis @ tangent_score_weight
+    right_inverse_residual = torch.linalg.vector_norm(
+        tangent_jacobian @ covering - tangent_fields,
+        dim=0,
+    )
 
     return DiscreteMalliavinTeacher(
         endpoint=endpoint,
         endpoint_jacobian=endpoint_jacobian,
         covariance=covariance,
-        covariance_eigenvalues=torch.linalg.eigvalsh(covariance),
+        covariance_eigenvalues=covariance_eigenvalues,
+        condition_number=_condition_number_from_eigenvalues(covariance_eigenvalues),
         covering=covering,
+        right_inverse_residual=right_inverse_residual,
+        gaussian_pairing=gaussian_pairing,
+        divergence_term=covering_divergence,
         skorokhod=skorokhod,
         directional_score_weight=directional_score_weight,
         score_weight=score_weight,
@@ -267,15 +316,18 @@ def discrete_malliavin_skorokhod_teacher(
     def flat_endpoint(z: Tensor) -> Tensor:
         return endpoint_fn(z.reshape(noise_shape)).reshape(-1)
 
-    def covering_from_noise(z: Tensor) -> Tensor:
+    def _prepare_endpoint_state(z: Tensor, *, create_graph: bool):
         endpoint = flat_endpoint(z)
         jacobian = _jacobian(
             flat_endpoint,
             z,
-            create_graph=True,
+            create_graph=create_graph,
             vectorize=vectorize_jacobian,
         ).reshape(endpoint.numel(), z.numel())
         fields = target_fields_fn(endpoint).reshape(endpoint.numel(), -1)
+        return endpoint, jacobian, fields
+
+    def _covering_from_endpoint_state(jacobian: Tensor, fields: Tensor) -> Tensor:
         covariance = jacobian @ jacobian.transpose(0, 1)
         covariance = 0.5 * (covariance + covariance.transpose(0, 1))
         eye = torch.eye(
@@ -289,18 +341,19 @@ def discrete_malliavin_skorokhod_teacher(
         )
         return jacobian.transpose(0, 1) @ coefficients
 
+    def covering_from_noise(z: Tensor) -> Tensor:
+        _, jacobian, fields = _prepare_endpoint_state(z, create_graph=True)
+        return _covering_from_endpoint_state(jacobian, fields)
+
     z_flat = noise.reshape(-1)
-    endpoint = flat_endpoint(z_flat)
-    endpoint_jacobian = _jacobian(
-        flat_endpoint,
+    endpoint, endpoint_jacobian, fields = _prepare_endpoint_state(
         z_flat,
-        create_graph=True,
-        vectorize=vectorize_jacobian,
-    ).reshape(endpoint.numel(), z_flat.numel())
+        create_graph=False,
+    )
     covariance = endpoint_jacobian @ endpoint_jacobian.transpose(0, 1)
-    covariance = 0.5 * (covariance + covariance.transpose(0, 1))
-    fields = target_fields_fn(endpoint).reshape(endpoint.numel(), -1)
-    covering = covering_from_noise(z_flat)
+    covariance = _symmetrize(covariance)
+    covariance_eigenvalues = torch.linalg.eigvalsh(covariance)
+    covering = _covering_from_endpoint_state(endpoint_jacobian, fields)
 
     covering_jacobian = _jacobian(
         covering_from_noise,
@@ -327,6 +380,10 @@ def discrete_malliavin_skorokhod_teacher(
             )
 
     directional_score_weight = -skorokhod - field_divergence
+    right_inverse_residual = torch.linalg.vector_norm(
+        endpoint_jacobian @ covering - fields,
+        dim=0,
+    )
 
     # directional_score_weight[a] = <score_weight, V_a>.  The pseudoinverse
     # handles redundant generating fields, e.g. the three projected ambient
@@ -339,8 +396,12 @@ def discrete_malliavin_skorokhod_teacher(
         endpoint=endpoint,
         endpoint_jacobian=endpoint_jacobian,
         covariance=covariance,
-        covariance_eigenvalues=torch.linalg.eigvalsh(covariance),
+        covariance_eigenvalues=covariance_eigenvalues,
+        condition_number=_condition_number_from_eigenvalues(covariance_eigenvalues),
         covering=covering,
+        right_inverse_residual=right_inverse_residual,
+        gaussian_pairing=gaussian_pairing,
+        divergence_term=covering_divergence,
         skorokhod=skorokhod,
         directional_score_weight=directional_score_weight,
         score_weight=score_weight,

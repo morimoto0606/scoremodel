@@ -1,113 +1,326 @@
-Goal:
+# Riemannian Malliavin Score-Based Generative Modeling 実装仕様書
 
-Tonight, verify that the De Bortoli / Riemannian Score-SDE S² setup works in our repository.
+## 目的
 
-Do NOT implement manifold Malliavin yet.
+本プロジェクトでは，Riemann 多様体上の Score-Based Generative Modeling に対して，
+Malliavin 解析に基づく score teacher を実装する．
 
-Environment is already configured. Just activate:
+理論はプレプリントで導出した
 
-source ~/github/scoremodel/.venv-riemannian/bin/activate
+\[
+V\log p_t(x)
+=
+-
+E[D^*u_t^V\mid X_t=x]
+-
+\operatorname{div}V(x)
+\]
 
-This activation already sets:
+に基づく．
 
-JAX_ENABLE_X64=True
-GEOMSTATS_BACKEND=jax
-PYTHONPATH=~/github/scoremodel/upstream/geomstats:$PYTHONPATH
+実装は既存の upstream (Riemannian Score SDE) を変更せず，
+`scoremodel_ext` 以下のみで実装する。
 
-Do not modify:
+---
 
-upstream/geomstats
-upstream/riemannian-score-sde
+# 基本方針
 
-Tasks:
+現在実装済みの
 
-1. Clean up and extend:
+- geodesic random walk
+- endpoint map
+- heat kernel score
+- Varadhan score
+- reverse GRW
 
-src/scoremodel_ext/manifold/s2_teacher_compare.py
+はそのまま利用する。
 
-Compare:
+Malliavin teacher を追加し，
+既存実装と比較できるようにする。
 
-s_var = M.metric.log(x0, xt) / t[:, None]
+upstream のコードは変更しない。
 
-and
+---
 
-s_db = M.grad_marginal_log_prob(
-    x0, xt, t,
-    thresh=thresh,
-    n_max=n_max,
-)
+# Phase 1 : Malliavin teacher の完成
 
-Use:
+## 目的
 
-M = Hypersphere(dim=2)
+現在の tangent teacher は一つのベクトル場しか扱えない。
 
-Since M.random_walk() returns None for S², generate xt manually:
+これを複数のベクトル場を同時に扱えるように変更する。
 
-z = jax.random.normal(key, x0.shape)
-z_tan = M.to_tangent(z, x0)
-xt = M.metric.exp(jnp.sqrt(t)[:, None] * z_tan, x0)
+target_fields_fn(endpoint)
 
-Sweep:
+が
 
-times = [0.01, 0.05, 0.10, 0.50, 1.00]
-n_max_list = [5, 10, 20, 40]
-thresh_list = [0.0, 0.5]
+```
+[ambient_dim, n_fields]
+```
 
-Save:
+を返せるようにする。
 
-results/s2_debortoli_teacher_check/raw_results.csv
-results/s2_debortoli_teacher_check/summary.json
-results/s2_debortoli_teacher_check/rmse_vs_t.png
+内部では
 
-Report:
+\[
+J=\frac{\partial X_T}{\partial Z}
+\]
 
-rmse
-relative_error
-mean_norm_db
-mean_norm_var
+から
 
-2. Reproduce the original De Bortoli S² toy experiment.
+\[
+J_{\mathrm{tan}}
+=
+E^\top J
+\]
 
-We already inspected the config:
+を構成する。
 
-upstream/riemannian-score-sde/config/experiment/s2_toy.yaml
+さらに
 
-It says the command is:
+\[
+\gamma
+=
+J_{\mathrm{tan}}J_{\mathrm{tan}}^\top
+\]
 
-python main.py experiment=s2_toy
+を用いて
 
-First run a smoke test:
+\[
+U
+=
+J_{\mathrm{tan}}^\top
+(\gamma+\lambda I)^{-1}
+V_{\mathrm{tan}}
+\]
 
-cd ~/github/scoremodel/upstream/riemannian-score-sde
-python main.py experiment=s2_toy steps=10 batch_size=32 eval_batch_size=32
+を各ベクトル場について同時に計算する。
 
-If the smoke test succeeds, run a slightly larger check:
+---
 
-python main.py experiment=s2_toy steps=500 batch_size=256 eval_batch_size=256
+## diagnostics
 
-Only if that also succeeds, optionally start the default run:
+teacher の返り値に以下を追加する。
 
-python main.py experiment=s2_toy
+- covariance
+- covariance eigenvalues
+- condition number
+- right inverse residual
+- gaussian pairing
+- divergence term
 
-3. Record all commands and logs.
+論文用の解析にも利用できるようにする。
 
-Save under:
+---
 
-results/debortoli_reproduction/
+## Unit Test
 
-Include:
+以下を確認する。
 
-command.txt
-smoke_stdout.log
-smoke_stderr.log
-run_status.json
+- projector
+- tangent basis
+- exponential map
+- endpoint Jacobian
+- Malliavin covariance
+- covering field
+- Skorokhod divergence
 
-If the original experiment fails, do not spend too much time fixing it. Save the error log and summarize the failure.
+有限差分との一致も確認する。
 
-4. Do not implement any Malliavin code.
+---
 
-The manifold Malliavin formula has not yet been derived. The purpose tonight is only:
+# Phase 2 : S² teacher
 
-De Bortoli S² teacher works
-Original S² toy experiment starts/runs
-Outputs are saved for inspection
+## Target fields
+
+S² 上では
+
+\[
+A_i(x)=P(x)e_i
+\]
+
+を用いる。
+
+divergence は
+
+\[
+\operatorname{div}A_i=-2x_i
+\]
+
+を利用する。
+
+teacher は
+
+- directional_score_weight
+- score_weight
+
+の両方を返す。
+
+---
+
+## heat kernel との比較
+
+固定初期値
+
+\[
+X_0=x
+\]
+
+について
+
+- heat kernel score
+- Varadhan score
+- Malliavin teacher
+
+を比較する。
+
+評価項目
+
+- RMSE
+- cosine similarity
+- geodesic distance ごとの誤差
+
+---
+
+## Reverse sampling
+
+学習した score を
+
+```
+s2_reverse_grw
+```
+
+へ渡し，
+
+生成結果を
+
+- heat kernel score
+- Varadhan score
+
+と比較する。
+
+---
+
+# Phase 3 : Mixture distribution
+
+初期分布を一点ではなく mixture に変更する。
+
+teacher が周辺 score を学習できることを確認する。
+
+---
+
+# Phase 4 : Earthquake adapter
+
+ここで初めて upstream に接続する。
+
+**upstream は一切変更しない。**
+
+adapter を追加するだけにする。
+
+例えば
+
+```
+MalliavinScoreProvider
+```
+
+のようなクラスを作り，
+
+training loop が要求する
+
+```
+(time,
+ endpoint,
+ score_target)
+```
+
+を返す。
+
+---
+
+# Earthquake experiment
+
+既存の Earthquake 実験を利用し，
+
+teacher のみ
+
+- heat kernel
+- Varadhan
+- Malliavin
+
+に切り替えて比較する。
+
+ネットワークや optimizer は変更しない。
+
+比較項目
+
+- train loss
+- validation loss
+- generated samples
+- MMD
+- geodesic distance
+- 学習時間
+
+---
+
+# 実装方針
+
+既存の
+
+```
+s2_malliavin.py
+```
+
+にある
+
+- geodesic random walk
+- reverse GRW
+- heat kernel score
+- Varadhan score
+
+は削除・変更しない。
+
+追加実装のみ行う。
+
+---
+
+# 各 Phase 完了時に報告すること
+
+各 Phase が終わるたびに
+
+1. 変更したファイル
+2. 数式との対応
+3. 実行したテスト
+4. テスト結果
+5. 残っている課題
+6. 次に実装する内容
+
+を報告する。
+
+---
+
+# 最終目標
+
+最終的には
+
+1. S² 上で Malliavin teacher が理論通り動作することを確認する。
+
+2. heat-kernel score と比較して精度を評価する。
+
+3. reverse sampling が正しく動作することを確認する。
+
+4. Earthquake dataset に adapter を介して接続し，
+
+- 既存手法
+- Malliavin teacher
+
+を公平な条件で比較する。
+
+---
+
+# 注意事項
+
+- upstream は変更しない。
+- `scoremodel_ext` 以下だけで実装する。
+- 既存の geodesic random walk 実装は維持する。
+- 各 Phase の Unit Test を通してから次へ進む。
+- Earthquake 実験は最後に行う。

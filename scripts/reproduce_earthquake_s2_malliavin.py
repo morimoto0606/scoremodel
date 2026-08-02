@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -17,10 +18,14 @@ import torch
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-from scoremodel_ext.manifold.experiment_s2_malliavin_teacher import (
-    generate_s2_marginal_teacher_dataset,
-    train_s2_marginal_score,
+from scoremodel_ext.manifold.earthquake_adapter import (
+    S2TeacherProvider,
+    evaluate_s2_score_model,
+    load_earthquake_points,
+    nearest_neighbor_geodesic_summary,
+    s2_rbf_mmd,
 )
+from scoremodel_ext.manifold.experiment_s2_malliavin_teacher import train_s2_score_model
 from scoremodel_ext.manifold.s2_malliavin import s2_reverse_grw
 
 
@@ -43,6 +48,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-steps", type=int, default=10)
     parser.add_argument("--time", type=float, default=0.25)
     parser.add_argument("--gamma-reg", type=float, default=1e-6)
+    parser.add_argument("--teacher", choices=("malliavin", "heat", "varadhan"), default="malliavin")
+    parser.add_argument("--heat-terms", type=int, default=80)
     parser.add_argument("--epochs", type=int, default=300)
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--lr", type=float, default=2e-4)
@@ -50,19 +57,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-generate", type=int, default=4096)
     parser.add_argument("--grid-size", type=int, default=400)
     parser.add_argument("--kappa", type=float, default=80.0)
+    parser.add_argument("--validation-fraction", type=float, default=0.2)
     return parser.parse_args()
-
-
-def load_earthquake_points(csv_path: Path) -> np.ndarray:
-    latlon_deg = np.genfromtxt(csv_path, delimiter=",", skip_header=4)
-    lat = np.deg2rad(latlon_deg[:, 0])
-    lon = np.deg2rad(latlon_deg[:, 1])
-    x = np.cos(lat) * np.cos(lon)
-    y = np.cos(lat) * np.sin(lon)
-    z = np.sin(lat)
-    points = np.stack([x, y, z], axis=1)
-    points = points / np.linalg.norm(points, axis=1, keepdims=True)
-    return points
 
 
 def uniform_s2_samples(n: int, *, rng: np.random.Generator) -> np.ndarray:
@@ -140,6 +136,25 @@ def plot_scatter_map(points: np.ndarray, title: str, out_path: Path) -> None:
     plt.close(fig)
 
 
+def _compute_train_validation_indices(
+    n_total: int,
+    validation_fraction: float,
+    *,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    if n_total < 2:
+        raise ValueError("at least two earthquake points are required for train/validation split")
+    if not 0.0 < validation_fraction < 1.0:
+        raise ValueError("validation_fraction must be strictly between 0 and 1")
+
+    permutation = rng.permutation(n_total)
+    n_validation = int(round(validation_fraction * n_total))
+    n_validation = max(1, min(n_validation, n_total - 1))
+    validation_index = permutation[:n_validation]
+    train_index = permutation[n_validation:]
+    return train_index, validation_index
+
+
 def main() -> None:
     args = parse_args()
     args.outdir.mkdir(parents=True, exist_ok=True)
@@ -148,30 +163,59 @@ def main() -> None:
     dtype = torch.float64 if args.dtype == "float64" else torch.float32
 
     rng = np.random.default_rng(args.seed)
-    all_points = load_earthquake_points(args.earthquake_csv)
+    all_points_t = load_earthquake_points(args.earthquake_csv, dtype=dtype, device=device)
+    all_points = all_points_t.detach().cpu().numpy()
 
-    sel = rng.choice(all_points.shape[0], size=min(args.n_paths, all_points.shape[0]), replace=False)
-    initial_points_np = all_points[sel]
-    initial_points = torch.tensor(initial_points_np, dtype=dtype, device=device)
-    terminal_times = torch.full((initial_points.shape[0],), args.time, dtype=dtype, device=device)
+    train_index, validation_index = _compute_train_validation_indices(
+        all_points_t.shape[0],
+        args.validation_fraction,
+        rng=rng,
+    )
+    train_points_t = all_points_t[train_index]
+    validation_points_t = all_points_t[validation_index]
 
-    teacher_dataset = generate_s2_marginal_teacher_dataset(
-        initial_points,
-        terminal_times,
+    provider = S2TeacherProvider(
+        train_points_t,
         n_steps=args.n_steps,
         covariance_regularization=args.gamma_reg,
-        seed=args.seed,
+        n_heat_terms=args.heat_terms,
         vectorize_jacobian=True,
     )
+    teacher_dataset = provider.sample_dataset(
+        min(args.n_paths, train_points_t.shape[0]),
+        teacher=args.teacher,
+        minimum_time=args.time,
+        maximum_time=args.time,
+        seed=args.seed,
+    )
+    validation_provider = S2TeacherProvider(
+        validation_points_t,
+        n_steps=args.n_steps,
+        covariance_regularization=args.gamma_reg,
+        n_heat_terms=args.heat_terms,
+        vectorize_jacobian=True,
+    )
+    validation_dataset = validation_provider.sample_dataset(
+        min(args.n_paths, validation_points_t.shape[0]),
+        teacher=args.teacher,
+        minimum_time=args.time,
+        maximum_time=args.time,
+        seed=args.seed + 1,
+    )
 
-    score_model = train_s2_marginal_score(
+    train_started = time.perf_counter()
+    score_model = train_s2_score_model(
         teacher_dataset,
         n_epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.lr,
         device=device,
     )
+    train_seconds = time.perf_counter() - train_started
     score_model.eval()
+
+    train_loss = evaluate_s2_score_model(score_model, teacher_dataset)
+    validation_loss = evaluate_s2_score_model(score_model, validation_dataset)
 
     terminal_points = uniform_s2_samples(args.n_generate, rng=rng)
     terminal_points_t = torch.tensor(terminal_points, dtype=dtype, device=device)
@@ -187,6 +231,7 @@ def main() -> None:
         n_steps=args.reverse_steps,
     )
     generated = generated_t.detach().cpu().numpy()
+    generated_t_cpu = generated_t.detach().cpu()
 
     np.save(args.outdir / "generated_samples.npy", generated)
     np.save(args.outdir / "target_samples.npy", all_points)
@@ -230,11 +275,17 @@ def main() -> None:
     metrics = {
         "device": device,
         "dtype": args.dtype,
-        "n_paths": int(initial_points.shape[0]),
+        "teacher": args.teacher,
+        "n_paths": int(teacher_dataset["initial_point"].shape[0]),
         "n_steps": args.n_steps,
         "reverse_steps": args.reverse_steps,
         "epochs": args.epochs,
         "n_generate": args.n_generate,
+        "train_loss": train_loss,
+        "validation_loss": validation_loss,
+        "training_seconds": train_seconds,
+        "mmd_rbf": s2_rbf_mmd(generated_t_cpu, all_points_t, seed=args.seed),
+        "geodesic_distance": nearest_neighbor_geodesic_summary(generated_t_cpu, all_points_t, seed=args.seed),
         "target_resultant": float(np.linalg.norm(all_points.mean(axis=0))),
         "generated_resultant": float(np.linalg.norm(generated.mean(axis=0))),
     }

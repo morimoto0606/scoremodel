@@ -186,7 +186,7 @@ def train_mirafzali_skorokhod_net(
         hidden=hidden,
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
-    ).to(device)
+    ).to(device=device, dtype=x.dtype)
 
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=weight_decay)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=n_epochs)
