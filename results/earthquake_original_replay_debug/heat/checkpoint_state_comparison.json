@@ -1,0 +1,449 @@
+{
+  "keys": [
+    {
+      "key": "x_mean",
+      "checkpoint_shape": [
+        1,
+        3
+      ],
+      "restored_shape": [
+        1,
+        3
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.28453699108305625,
+      "exact_equal": false
+    },
+    {
+      "key": "x_std",
+      "checkpoint_shape": [
+        1,
+        3
+      ],
+      "restored_shape": [
+        1,
+        3
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 2.7193315930583974,
+      "exact_equal": false
+    },
+    {
+      "key": "t_mean",
+      "checkpoint_shape": [
+        1,
+        1
+      ],
+      "restored_shape": [
+        1,
+        1
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "t_std",
+      "checkpoint_shape": [
+        1,
+        1
+      ],
+      "restored_shape": [
+        1,
+        1
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "y_mean",
+      "checkpoint_shape": [
+        1,
+        3
+      ],
+      "restored_shape": [
+        1,
+        3
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "y_std",
+      "checkpoint_shape": [
+        1,
+        3
+      ],
+      "restored_shape": [
+        1,
+        3
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.ff.B",
+      "checkpoint_shape": [
+        4,
+        16
+      ],
+      "restored_shape": [
+        4,
+        16
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.in_layer.0.weight",
+      "checkpoint_shape": [
+        512,
+        36
+      ],
+      "restored_shape": [
+        512,
+        36
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.in_layer.0.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.0.net.0.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.0.net.0.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.0.net.2.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.0.net.2.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.1.net.0.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.1.net.0.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.1.net.2.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.1.net.2.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.2.net.0.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.2.net.0.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.2.net.2.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.2.net.2.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.3.net.0.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.3.net.0.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.3.net.2.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.3.net.2.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.4.net.0.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.4.net.0.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.4.net.2.weight",
+      "checkpoint_shape": [
+        512,
+        512
+      ],
+      "restored_shape": [
+        512,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.blocks.4.net.2.bias",
+      "checkpoint_shape": [
+        512
+      ],
+      "restored_shape": [
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.out_layer.weight",
+      "checkpoint_shape": [
+        3,
+        512
+      ],
+      "restored_shape": [
+        3,
+        512
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    },
+    {
+      "key": "net.out_layer.bias",
+      "checkpoint_shape": [
+        3
+      ],
+      "restored_shape": [
+        3
+      ],
+      "checkpoint_dtype": "torch.float64",
+      "restored_dtype": "torch.float64",
+      "max_abs_error": 0.0,
+      "exact_equal": true
+    }
+  ],
+  "missing_keys": [],
+  "unexpected_keys": [],
+  "overall_max_abs_error": 2.7193315930583974,
+  "first_mismatching_key": "x_mean"
+}

@@ -1,0 +1,16 @@
+Already up to date.
+.........................                                                [100%]
+25 passed in 3.15s
+
+========================================
+REAL ARTIFACT REPLAY START: heat
+========================================
+[2026-08-04 01:53:27] loading saved heat model from /home/export/home/ymorimoto/github/scoremodel/results/earthquake_lowt_heat/model.pt
+Traceback (most recent call last):
+  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 1798, in <module>
+    main()
+  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 1390, in main
+    run_saved_model_evaluation(args, output_dir=output_dir, log=log)
+  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 1291, in run_saved_model_evaluation
+    raise AssertionError(
+AssertionError: original 128-step generated samples were not reproduced: max_abs_error=1.365403e+00
