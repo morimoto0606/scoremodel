@@ -93,6 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-teacher-generation", action="store_true")
     parser.add_argument("--skip-training", action="store_true")
     parser.add_argument("--model-path", type=Path, default=None)
+    parser.add_argument("--replay-original-reverse-artifacts", action="store_true")
     parser.add_argument("--covariance-regularization", type=float, default=1e-6)
     parser.add_argument("--heat-terms", type=int, default=80)
     parser.add_argument("--viz-output-dir", type=Path, default=None)
@@ -102,6 +103,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--skip-training requires --model-path")
     if args.skip_teacher_generation and not args.skip_training:
         parser.error("--skip-teacher-generation requires --skip-training")
+    if args.replay_original_reverse_artifacts and not args.skip_training:
+        parser.error("--replay-original-reverse-artifacts requires --skip-training")
     if not args.skip_training and args.teacher is None:
         parser.error("--teacher is required unless --skip-training is used")
     return args
@@ -473,6 +476,85 @@ def build_model_from_run_config(
     return model
 
 
+def checkpoint_inventory(model_path: Path) -> Dict[str, object]:
+    """Describe checkpoint metadata and every state-dict tensor shape."""
+
+    checkpoint = torch.load(model_path, map_location="cpu")
+    if not isinstance(checkpoint, dict) or "state_dict" not in checkpoint:
+        raise ValueError(f"saved model has no state_dict: {model_path}")
+    metadata = {
+        key: {
+            "type": type(value).__name__,
+            **({"shape": list(value.shape)} if isinstance(value, torch.Tensor) else {}),
+            **(
+                {"value": value}
+                if isinstance(value, (str, int, float, bool)) or value is None
+                else {}
+            ),
+        }
+        for key, value in checkpoint.items()
+        if key != "state_dict"
+    }
+    state_dict = checkpoint["state_dict"]
+    return {
+        "checkpoint_keys": list(checkpoint.keys()),
+        "metadata": metadata,
+        "state_dict": {
+            key: {
+                "shape": list(value.shape),
+                "dtype": str(value.dtype),
+            }
+            for key, value in state_dict.items()
+        },
+    }
+
+
+def checkpoint_state_max_abs_error(model, model_path: Path) -> float:
+    """Return the largest tensor error between a model and its checkpoint."""
+
+    checkpoint = torch.load(model_path, map_location="cpu")["state_dict"]
+    restored = model.state_dict()
+    if checkpoint.keys() != restored.keys():
+        raise ValueError("restored model state_dict keys differ from checkpoint")
+    return max(
+        float(
+            torch.max(
+                torch.abs(
+                    restored[key].detach().cpu().to(torch.float64)
+                    - checkpoint[key].detach().cpu().to(torch.float64)
+                )
+            )
+        )
+        for key in checkpoint
+    )
+
+
+def load_original_reverse_artifact(
+    path: Path,
+    *,
+    reverse_steps: int,
+    n_generated_samples: int,
+    dtype: torch.dtype,
+    device: str,
+    output_path: Path,
+) -> torch.Tensor:
+    """Load an original run's reverse noise without pooling or aggregation."""
+
+    if not path.is_file():
+        raise FileNotFoundError(f"missing original reverse noise: {path}")
+    payload = torch.load(path, map_location="cpu")
+    noise = payload["reverse_noise"] if isinstance(payload, dict) else payload
+    expected_shape = (reverse_steps, n_generated_samples, 3)
+    if tuple(noise.shape) != expected_shape:
+        raise ValueError(
+            f"original reverse noise must have shape {expected_shape}, "
+            f"got {tuple(noise.shape)} from {path}"
+        )
+    noise = noise.to(device=device, dtype=dtype)
+    torch.save(noise.detach().cpu(), output_path)
+    return noise
+
+
 def maybe_load_or_create_shared_reverse_noise(
     *,
     path: Path,
@@ -834,6 +916,12 @@ def run_saved_model_evaluation(
 
     log(f"loading saved {teacher} model from {model_path}")
     model = build_model_from_run_config(model_path, source_config, device=device)
+    model_state_error = checkpoint_state_max_abs_error(model, model_path)
+    inventory = checkpoint_inventory(model_path)
+    with (output_dir / "checkpoint_inventory.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(inventory, handle, indent=2)
     observed_train, observed_validation = _load_saved_evaluation_points(
         source_model_dir,
         source_config,
@@ -846,6 +934,8 @@ def run_saved_model_evaluation(
         if args.terminal_samples_path is not None
         else source_model_dir / "terminal_samples.pt"
     )
+    if args.replay_original_reverse_artifacts and not terminal_path.is_file():
+        raise FileNotFoundError(f"missing original terminal samples: {terminal_path}")
     terminal_samples = maybe_load_or_create_terminal_samples(
         path=terminal_path,
         output_path=output_dir / "terminal_samples.pt",
@@ -861,30 +951,68 @@ def run_saved_model_evaluation(
             f"got {tuple(terminal_samples.shape)}"
         )
 
-    shared_noise_path = (
-        args.reverse_noise_path.expanduser().resolve()
-        if args.reverse_noise_path is not None
-        else source_model_dir / "reverse_noise_1000.pt"
-    )
-    reverse_noise = maybe_load_or_create_shared_reverse_noise(
-        path=shared_noise_path,
-        output_path=output_dir / "reverse_noise.pt",
-        reverse_steps=reverse_steps,
-        n_generated_samples=n_generated_samples,
-        dtype=dtype,
-        device=device,
-        seed=int(source_config["reverse_seed"]),
-    )
+    if args.replay_original_reverse_artifacts:
+        original_reverse_steps = int(source_config["reverse_steps"])
+        if reverse_steps != original_reverse_steps:
+            raise ValueError(
+                "original-artifact replay requires reverse_steps to match "
+                f"the source run ({original_reverse_steps})"
+            )
+        reverse_noise_path = (
+            args.reverse_noise_path.expanduser().resolve()
+            if args.reverse_noise_path is not None
+            else source_model_dir / "reverse_noise.pt"
+        )
+        reverse_noise = load_original_reverse_artifact(
+            reverse_noise_path,
+            reverse_steps=reverse_steps,
+            n_generated_samples=n_generated_samples,
+            dtype=dtype,
+            device=device,
+            output_path=output_dir / "reverse_noise.pt",
+        )
+        reverse_noise_coupling = "original_run_artifact"
+        reverse_noise_coupling_exact = True
+    else:
+        reverse_noise_path = (
+            args.reverse_noise_path.expanduser().resolve()
+            if args.reverse_noise_path is not None
+            else source_model_dir / "reverse_noise_1000.pt"
+        )
+        reverse_noise = maybe_load_or_create_shared_reverse_noise(
+            path=reverse_noise_path,
+            output_path=output_dir / "reverse_noise.pt",
+            reverse_steps=reverse_steps,
+            n_generated_samples=n_generated_samples,
+            dtype=dtype,
+            device=device,
+            seed=int(source_config["reverse_seed"]),
+        )
+        reverse_noise_coupling = (
+            "linear_interpolation_of_cumulative_fine_brownian_path"
+        )
+        reverse_noise_coupling_exact = (
+            MAX_REVERSE_NOISE_STEPS % reverse_steps == 0
+        )
 
     reverse_started = time.perf_counter()
-    generated = s2_reverse_grw(
+    reverse_result = s2_reverse_grw(
         terminal_samples,
         build_score_fn(model),
         terminal_time=float(source_config["maximum_time"]),
         n_steps=reverse_steps,
         standard_noise=reverse_noise,
         minimum_forward_time=float(source_config["minimum_time"]),
+        return_first_step=args.replay_original_reverse_artifacts,
     )
+    if args.replay_original_reverse_artifacts:
+        generated, first_step_generated = reverse_result
+        torch.save(
+            first_step_generated.detach().cpu(),
+            output_dir / "generated_samples_after_first_reverse_step.pt",
+        )
+    else:
+        generated = reverse_result
     reverse_sampling_seconds = time.perf_counter() - reverse_started
     generated_cpu = generated.detach().cpu()
     target_cpu = observed_validation.detach().cpu()
@@ -904,6 +1032,56 @@ def run_saved_model_evaluation(
         seed=evaluation_seed,
     )
     sample_finite_rate = finite_rate(generated_cpu)
+    reproduction_max_abs_error = None
+    reproduction_passed = False
+    if args.replay_original_reverse_artifacts:
+        reference_generated_path = source_model_dir / "generated_samples.pt"
+        if not reference_generated_path.is_file():
+            raise FileNotFoundError(
+                "original-artifact replay requires the source generated samples: "
+                f"{reference_generated_path}"
+            )
+        reference_generated = torch.load(
+            reference_generated_path,
+            map_location="cpu",
+        ).to(dtype=dtype)
+        if tuple(reference_generated.shape) != tuple(generated_cpu.shape):
+            raise ValueError(
+                "source generated samples have shape "
+                f"{tuple(reference_generated.shape)}, expected {tuple(generated_cpu.shape)}"
+            )
+        reproduction_max_abs_error = float(
+            torch.max(torch.abs(generated_cpu - reference_generated))
+        )
+        reproduction_passed = reproduction_max_abs_error <= 1e-12
+        reproduction = {
+            "teacher": teacher,
+            "passed": reproduction_passed,
+            "atol": 1e-12,
+            "rtol": 0.0,
+            "max_abs_error": reproduction_max_abs_error,
+            "checkpoint_state_max_abs_error": model_state_error,
+            "terminal_samples_path": str(terminal_path),
+            "reverse_noise_path": str(reverse_noise_path),
+            "reverse_steps": reverse_steps,
+            "terminal_time": float(source_config["maximum_time"]),
+            "minimum_forward_time": float(source_config["minimum_time"]),
+            "dt": float(source_config["maximum_time"]) / reverse_steps,
+            "first_forward_time": float(source_config["maximum_time"]),
+            "last_forward_time": max(
+                float(source_config["maximum_time"]) / reverse_steps,
+                float(source_config["minimum_time"]),
+            ),
+        }
+        with (output_dir / "original_run_reproduction.json").open(
+            "w", encoding="utf-8"
+        ) as handle:
+            json.dump(reproduction, handle, indent=2)
+        if not reproduction_passed:
+            raise AssertionError(
+                "original 128-step generated samples were not reproduced: "
+                f"max_abs_error={reproduction_max_abs_error:.6e}"
+            )
     metrics = {
         "teacher": teacher,
         "evaluation_only": True,
@@ -925,6 +1103,12 @@ def run_saved_model_evaluation(
         "nan_rate": 1.0 - sample_finite_rate,
         "generated_all_finite": bool(sample_finite_rate == 1.0),
         "generated_sample_count": int(generated_cpu.shape[0]),
+        "original_reverse_artifact_replay": bool(
+            args.replay_original_reverse_artifacts
+        ),
+        "original_reproduction_max_abs_error": reproduction_max_abs_error,
+        "checkpoint_state_max_abs_error": model_state_error,
+        "ablation_validated_against_original_run": reproduction_passed,
         "device": device,
         "dtype": dtype_name,
     }
@@ -941,13 +1125,12 @@ def run_saved_model_evaluation(
             "skip_training": True,
             "reverse_steps": reverse_steps,
             "terminal_samples_path": str(terminal_path),
-            "reverse_noise_path": str(shared_noise_path),
+            "reverse_noise_path": str(reverse_noise_path),
             "reverse_noise_pool_steps": MAX_REVERSE_NOISE_STEPS,
-            "reverse_noise_coupling": (
-                "linear_interpolation_of_cumulative_fine_brownian_path"
-            ),
-            "reverse_noise_coupling_exact": (
-                MAX_REVERSE_NOISE_STEPS % reverse_steps == 0
+            "reverse_noise_coupling": reverse_noise_coupling,
+            "reverse_noise_coupling_exact": reverse_noise_coupling_exact,
+            "replay_original_reverse_artifacts": bool(
+                args.replay_original_reverse_artifacts
             ),
             "resolved_device": device,
         }

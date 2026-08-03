@@ -1,5 +1,12 @@
 # Earthquake Reverse-Steps Ablation
 
+> **INVALID / NOT FOR SCIENTIFIC COMPARISON.** These runs used a newly
+> generated 1000-step noise pool and did not reproduce the original 128-step
+> artifacts. Re-run and validate the original-artifact 128-step replay for each
+> teacher before treating any row below as an ablation result. The companion
+> CSV contains the same invalidated rows and is retained only as a diagnostic
+> record.
+
 | teacher | reverse_steps | s2_rbf_mmd | generated_to_observed_mean | generated_to_observed_median | generated_to_observed_max | observed_to_generated_mean | observed_to_generated_median | observed_to_generated_max | reverse_sampling_seconds | generated_sample_norm_error |
 |---|---|---|---|---|---|---|---|---|---|---|
 | heat | 128 | 0.044902285 | 0.23143345 | 0.19217543 | 0.89517362 | 0.035736918 | 0.032278876 | 0.11211148 | 82.346475 | 1.2359905e-17 |

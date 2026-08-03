@@ -365,7 +365,8 @@ def s2_reverse_grw(
     n_steps: int,
     standard_noise: Tensor | None = None,
     minimum_forward_time: float = 1e-3,
-) -> Tensor:
+    return_first_step: bool = False,
+) -> Tensor | Tuple[Tensor, Tensor]:
     r"""De Bortoli reverse GRW for a Brownian forward process on ``S2``.
 
     For forward generator ``(1/2) Delta`` the reverse drift is the manifold
@@ -384,6 +385,9 @@ def s2_reverse_grw(
     standard_noise:
         Optional tensor ``[n_steps, batch, 3]``.  Supplying it makes server
         comparisons reproducible.
+    return_first_step:
+        If true, also return the samples immediately after the first update.
+        The default return value and numerical path are unchanged.
     """
 
     if terminal_points.ndim != 2 or terminal_points.shape[1] != 3:
@@ -408,6 +412,7 @@ def s2_reverse_grw(
 
     dt = terminal_time / n_steps
     sqrt_dt = math.sqrt(dt)
+    first_step_points = None
     for step in range(n_steps):
         forward_time = max(terminal_time - step * dt, minimum_forward_time)
         time_batch = torch.full(
@@ -426,4 +431,9 @@ def s2_reverse_grw(
         points = torch.stack(
             [s2_exp(point, increment) for point, increment in zip(points, tangent_increment)]
         )
+        if return_first_step and step == 0:
+            first_step_points = points.clone()
+    if return_first_step:
+        assert first_step_points is not None
+        return points, first_step_points
     return points
