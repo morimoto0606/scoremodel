@@ -1,0 +1,8 @@
+[2026-08-03 15:47:14] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-03 15:47:14] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-03 15:47:14] time samples ready: mode=curated-lowt train=time_samples.pt validation=validation_time_samples.pt
+  epoch=  500  loss=2.330452e-01  best=2.423816e-01
+  epoch= 1000  loss=1.675172e-01  best=1.660727e-01
+[2026-08-03 15:50:17] teacher=varadhan training_path=direct_score
+[2026-08-03 15:50:17] final_train_loss=1.660727e-01 validation_loss=3.967504e+01
+[2026-08-03 15:50:17] mmd=1.998307e-02 geodesic_mean=1.555958e-01 norm_error=1.431147e-17
