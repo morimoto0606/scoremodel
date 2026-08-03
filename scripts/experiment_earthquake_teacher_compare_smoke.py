@@ -442,13 +442,34 @@ def build_model_from_run_config(
     if missing:
         raise ValueError(f"run_config.json is missing model fields: {missing}")
 
-    dtype = to_dtype(str(run_config["dtype"]))
-    network = MirafzaliSkorokhodNet(
-        x_dim=3,
-        out_dim=3,
+    model = _build_saved_model_architecture(
+        teacher=str(run_config["teacher"]),
         hidden=int(run_config["hidden"]),
         n_blocks=int(run_config["n_blocks"]),
         num_frequencies=int(run_config["num_frequencies"]),
+        dtype=to_dtype(str(run_config["dtype"])),
+        device=device,
+    )
+    return _load_saved_model_state(model, model_path)
+
+
+def _build_saved_model_architecture(
+    *,
+    teacher: str,
+    hidden: int,
+    n_blocks: int,
+    num_frequencies: int,
+    dtype: torch.dtype,
+    device: str,
+):
+    """Build the classes returned by the original two training functions."""
+
+    network = MirafzaliSkorokhodNet(
+        x_dim=3,
+        out_dim=3,
+        hidden=hidden,
+        n_blocks=n_blocks,
+        num_frequencies=num_frequencies,
     ).to(device=device, dtype=dtype)
     zeros_vector = torch.zeros(1, 3, dtype=dtype, device=device)
     ones_vector = torch.ones(1, 3, dtype=dtype, device=device)
@@ -463,17 +484,70 @@ def build_model_from_run_config(
         zeros_vector,
         ones_vector,
     ).to(device=device, dtype=dtype)
-    if run_config["teacher"] == "malliavin":
-        model = S2SkorokhodScoreModel(normalized_model).to(device=device, dtype=dtype)
-    else:
-        model = normalized_model
+    if teacher == "malliavin":
+        return S2SkorokhodScoreModel(normalized_model).to(
+            device=device,
+            dtype=dtype,
+        )
+    return normalized_model
 
+
+def _load_saved_model_state(model, model_path: Path):
     checkpoint = torch.load(model_path, map_location="cpu")
     if not isinstance(checkpoint, dict) or "state_dict" not in checkpoint:
         raise ValueError(f"saved model has no state_dict: {model_path}")
     model.load_state_dict(checkpoint["state_dict"], strict=True)
     model.eval()
     return model
+
+
+def build_model_from_training_checkpoint(model_path: Path, *, device: str):
+    """Rebuild using checkpoint metadata and the original training-path wrapper."""
+
+    checkpoint = torch.load(model_path, map_location="cpu")
+    required = (
+        "teacher",
+        "training_path",
+        "state_dict",
+        "hidden",
+        "n_blocks",
+        "num_frequencies",
+        "dtype",
+    )
+    missing = [key for key in required if key not in checkpoint]
+    if missing:
+        raise ValueError(f"model checkpoint is missing fields: {missing}")
+    training_path = str(checkpoint["training_path"])
+    teacher = str(checkpoint["teacher"])
+    expected_path = "marginal_skorokhod" if teacher == "malliavin" else "direct_score"
+    if training_path != expected_path:
+        raise ValueError(
+            f"checkpoint training_path={training_path!r}, expected {expected_path!r}"
+        )
+    model = _build_saved_model_architecture(
+        teacher=teacher,
+        hidden=int(checkpoint["hidden"]),
+        n_blocks=int(checkpoint["n_blocks"]),
+        num_frequencies=int(checkpoint["num_frequencies"]),
+        dtype=to_dtype(str(checkpoint["dtype"])),
+        device=device,
+    )
+    return _load_saved_model_state(model, model_path)
+
+
+def build_model_from_checkpoint_metadata(model_path: Path, *, device: str):
+    """Rebuild solely from architecture metadata stored inside model.pt."""
+
+    checkpoint = torch.load(model_path, map_location="cpu")
+    model = _build_saved_model_architecture(
+        teacher=str(checkpoint["teacher"]),
+        hidden=int(checkpoint["hidden"]),
+        n_blocks=int(checkpoint["n_blocks"]),
+        num_frequencies=int(checkpoint["num_frequencies"]),
+        dtype=to_dtype(str(checkpoint["dtype"])),
+        device=device,
+    )
+    return _load_saved_model_state(model, model_path)
 
 
 def checkpoint_inventory(model_path: Path) -> Dict[str, object]:
@@ -506,6 +580,115 @@ def checkpoint_inventory(model_path: Path) -> Dict[str, object]:
             }
             for key, value in state_dict.items()
         },
+    }
+
+
+def compare_checkpoint_state(model, model_path: Path) -> Dict[str, object]:
+    """Compare every restored state tensor with the serialized checkpoint."""
+
+    checkpoint_state = torch.load(model_path, map_location="cpu")["state_dict"]
+    restored_state = model.state_dict()
+    missing_keys = [key for key in checkpoint_state if key not in restored_state]
+    unexpected_keys = [key for key in restored_state if key not in checkpoint_state]
+    rows = []
+    overall_max_abs_error = 0.0
+    first_mismatching_key = None
+    for key, checkpoint_value in checkpoint_state.items():
+        restored_value = restored_state.get(key)
+        if restored_value is None:
+            continue
+        same_shape = tuple(checkpoint_value.shape) == tuple(restored_value.shape)
+        if same_shape:
+            checkpoint_cpu = checkpoint_value.detach().cpu()
+            restored_cpu = restored_value.detach().cpu().to(checkpoint_cpu.dtype)
+            max_abs_error = float(
+                torch.max(
+                    torch.abs(
+                        checkpoint_cpu.to(torch.float64)
+                        - restored_cpu.to(torch.float64)
+                    )
+                )
+            )
+            exact_equal = bool(torch.equal(checkpoint_cpu, restored_cpu))
+            overall_max_abs_error = max(overall_max_abs_error, max_abs_error)
+        else:
+            max_abs_error = None
+            exact_equal = False
+        if not exact_equal and first_mismatching_key is None:
+            first_mismatching_key = key
+        rows.append(
+            {
+                "key": key,
+                "checkpoint_shape": list(checkpoint_value.shape),
+                "restored_shape": list(restored_value.shape),
+                "checkpoint_dtype": str(checkpoint_value.dtype),
+                "restored_dtype": str(restored_value.dtype),
+                "max_abs_error": max_abs_error,
+                "exact_equal": exact_equal,
+            }
+        )
+    if first_mismatching_key is None:
+        first_mismatching_key = (missing_keys + unexpected_keys or [None])[0]
+    return {
+        "keys": rows,
+        "missing_keys": missing_keys,
+        "unexpected_keys": unexpected_keys,
+        "overall_max_abs_error": overall_max_abs_error,
+        "first_mismatching_key": first_mismatching_key,
+    }
+
+
+def compare_model_reconstruction_paths(
+    *,
+    teacher: str,
+    run_config: Dict[str, object],
+    checkpoint: Dict[str, object],
+    models: Dict[str, object],
+) -> Dict[str, object]:
+    """Evaluate all saved-model reconstruction paths on fixed inputs."""
+
+    dtype = to_dtype(str(checkpoint["dtype"]))
+    device = next(models["A_run_config"].parameters()).device
+    times = torch.tensor([0.005, 0.05, 0.1, 0.3], dtype=dtype, device=device)
+    points = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+        ],
+        dtype=dtype,
+        device=device,
+    )
+    points = normalize(points)
+    with torch.no_grad():
+        outputs = {
+            name: model(times, points).detach().cpu()
+            for name, model in models.items()
+        }
+    names = list(outputs)
+    pairwise = {}
+    for left_index, left in enumerate(names):
+        for right in names[left_index + 1 :]:
+            pairwise[f"{left}_vs_{right}"] = float(
+                torch.max(torch.abs(outputs[left] - outputs[right]))
+            )
+    metadata_fields = ("teacher", "hidden", "n_blocks", "num_frequencies", "dtype")
+    metadata_mismatches = {
+        key: {
+            "run_config": run_config.get(key),
+            "checkpoint": checkpoint.get(key),
+        }
+        for key in metadata_fields
+        if run_config.get(key) != checkpoint.get(key)
+    }
+    return {
+        "teacher": teacher,
+        "input_t": times.detach().cpu().tolist(),
+        "input_x": points.detach().cpu().tolist(),
+        "outputs": {name: value.tolist() for name, value in outputs.items()},
+        "pairwise_max_abs_error": pairwise,
+        "metadata_mismatches": metadata_mismatches,
     }
 
 
@@ -915,8 +1098,32 @@ def run_saved_model_evaluation(
     reverse_steps = int(args.reverse_steps)
 
     log(f"loading saved {teacher} model from {model_path}")
-    model = build_model_from_run_config(model_path, source_config, device=device)
+    checkpoint = torch.load(model_path, map_location="cpu")
+    model_a = build_model_from_run_config(model_path, source_config, device=device)
+    model_b = build_model_from_training_checkpoint(model_path, device=device)
+    model_c = build_model_from_checkpoint_metadata(model_path, device=device)
+    model_output_comparison = compare_model_reconstruction_paths(
+        teacher=teacher,
+        run_config=source_config,
+        checkpoint=checkpoint,
+        models={
+            "A_run_config": model_a,
+            "B_training_path": model_b,
+            "C_checkpoint_metadata": model_c,
+        },
+    )
+    with (output_dir / "model_output_comparison.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(model_output_comparison, handle, indent=2)
+    # Replay uses the original training-path wrapper and checkpoint metadata.
+    model = model_b
     model_state_error = checkpoint_state_max_abs_error(model, model_path)
+    state_comparison = compare_checkpoint_state(model, model_path)
+    with (output_dir / "checkpoint_state_comparison.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(state_comparison, handle, indent=2)
     inventory = checkpoint_inventory(model_path)
     with (output_dir / "checkpoint_inventory.json").open(
         "w", encoding="utf-8"
@@ -1004,6 +1211,9 @@ def run_saved_model_evaluation(
         standard_noise=reverse_noise,
         minimum_forward_time=float(source_config["minimum_time"]),
         return_first_step=args.replay_original_reverse_artifacts,
+        debug_output_dir=(
+            output_dir if args.replay_original_reverse_artifacts else None
+        ),
     )
     if args.replay_original_reverse_artifacts:
         generated, first_step_generated = reverse_result

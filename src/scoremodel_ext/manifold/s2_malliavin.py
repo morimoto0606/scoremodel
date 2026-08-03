@@ -9,6 +9,7 @@ correction without using the additive-noise formula of Mirafzali et al.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
@@ -366,6 +367,7 @@ def s2_reverse_grw(
     standard_noise: Tensor | None = None,
     minimum_forward_time: float = 1e-3,
     return_first_step: bool = False,
+    debug_output_dir: str | Path | None = None,
 ) -> Tensor | Tuple[Tensor, Tensor]:
     r"""De Bortoli reverse GRW for a Brownian forward process on ``S2``.
 
@@ -388,6 +390,9 @@ def s2_reverse_grw(
     return_first_step:
         If true, also return the samples immediately after the first update.
         The default return value and numerical path are unchanged.
+    debug_output_dir:
+        Optional directory for step-0/step-1 intermediate tensors. Debugging is
+        opt-in; leaving this unset preserves the ordinary numerical path.
     """
 
     if terminal_points.ndim != 2 or terminal_points.shape[1] != 3:
@@ -412,8 +417,12 @@ def s2_reverse_grw(
 
     dt = terminal_time / n_steps
     sqrt_dt = math.sqrt(dt)
+    debug_dir = Path(debug_output_dir) if debug_output_dir is not None else None
+    if debug_dir is not None:
+        debug_dir.mkdir(parents=True, exist_ok=True)
     first_step_points = None
     for step in range(n_steps):
+        input_points = points
         forward_time = max(terminal_time - step * dt, minimum_forward_time)
         time_batch = torch.full(
             (points.shape[0],),
@@ -421,16 +430,35 @@ def s2_reverse_grw(
             dtype=points.dtype,
             device=points.device,
         )
-        score = score_fn(time_batch, points)
+        raw_score = score_fn(time_batch, points)
         projector = _batched_s2_projector(points)
-        score = torch.einsum("bij,bj->bi", projector, score)
-        tangent_noise = torch.einsum(
+        projected_score = torch.einsum("bij,bj->bi", projector, raw_score)
+        raw_noise = standard_noise[step]
+        projected_noise = torch.einsum(
             "bij,bj->bi", projector, standard_noise[step]
         )
-        tangent_increment = dt * score + sqrt_dt * tangent_noise
+        tangent_increment = dt * projected_score + sqrt_dt * projected_noise
         points = torch.stack(
             [s2_exp(point, increment) for point, increment in zip(points, tangent_increment)]
         )
+        if debug_dir is not None and step < 2:
+            torch.save(
+                {
+                    "input_points": input_points.detach().cpu(),
+                    "forward_time": torch.tensor(forward_time, dtype=points.dtype),
+                    "time_batch": time_batch.detach().cpu(),
+                    "raw_score": raw_score.detach().cpu(),
+                    "projector": projector.detach().cpu(),
+                    "projected_score": projected_score.detach().cpu(),
+                    "raw_noise": raw_noise.detach().cpu(),
+                    "projected_noise": projected_noise.detach().cpu(),
+                    "dt": torch.tensor(dt, dtype=points.dtype),
+                    "sqrt_dt": torch.tensor(sqrt_dt, dtype=points.dtype),
+                    "tangent_increment": tangent_increment.detach().cpu(),
+                    "output_points": points.detach().cpu(),
+                },
+                debug_dir / f"reverse_debug_step_{step:03d}.pt",
+            )
         if return_first_step and step == 0:
             first_step_points = points.clone()
     if return_first_step:

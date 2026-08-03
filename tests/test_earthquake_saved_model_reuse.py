@@ -9,6 +9,7 @@ from scoremodel_ext.malliavin.models import (
     NormalizedSkorokhodModel,
 )
 from scoremodel_ext.manifold.s2_malliavin import S2SkorokhodScoreModel
+from scripts.compare_earthquake_reverse_debug import compare_debug_directories
 from scripts import experiment_earthquake_teacher_compare_smoke as runner
 
 
@@ -86,6 +87,27 @@ def test_saved_model_structure_is_rebuilt_from_run_config(tmp_path, teacher):
     max_abs_error = float(torch.max(torch.abs(expected_output - loaded_output)))
     assert max_abs_error < 1e-12
 
+    training_path_model = runner.build_model_from_training_checkpoint(
+        model_path,
+        device="cpu",
+    )
+    metadata_model = runner.build_model_from_checkpoint_metadata(
+        model_path,
+        device="cpu",
+    )
+    comparison = runner.compare_model_reconstruction_paths(
+        teacher=teacher,
+        run_config=config,
+        checkpoint=torch.load(model_path, map_location="cpu"),
+        models={
+            "A_run_config": loaded,
+            "B_training_path": training_path_model,
+            "C_checkpoint_metadata": metadata_model,
+        },
+    )
+    assert comparison["metadata_mismatches"] == {}
+    assert max(comparison["pairwise_max_abs_error"].values()) < 1e-12
+
 
 @pytest.mark.parametrize("teacher", ["heat", "varadhan", "malliavin"])
 def test_normalization_buffers_are_restored_from_checkpoint(tmp_path, teacher):
@@ -116,6 +138,11 @@ def test_normalization_buffers_are_restored_from_checkpoint(tmp_path, teacher):
         "dtype",
     ]
     assert runner.checkpoint_state_max_abs_error(loaded, model_path) == 0.0
+    state_comparison = runner.compare_checkpoint_state(loaded, model_path)
+    assert state_comparison["missing_keys"] == []
+    assert state_comparison["unexpected_keys"] == []
+    assert state_comparison["overall_max_abs_error"] == 0.0
+    assert state_comparison["first_mismatching_key"] is None
     for key in expected_buffer_keys:
         assert inventory["state_dict"][key]["shape"] in ([1, 3], [1, 1])
 
@@ -326,10 +353,42 @@ def test_original_128_step_artifact_replay_reproduces_generated_samples(
         minimum_forward_time=0.005,
         return_first_step=True,
     )
+    debug_dir = tmp_path / f"debug_{teacher}"
+    debug_final = runner.s2_reverse_grw(
+        torch.load(tmp_path / "terminal_samples.pt"),
+        runner.build_score_fn(restored_model),
+        terminal_time=0.3,
+        n_steps=128,
+        standard_noise=replay_noise,
+        minimum_forward_time=0.005,
+        debug_output_dir=debug_dir,
+    )
 
     torch.testing.assert_close(replay_noise, original_noise, rtol=0.0, atol=0.0)
     torch.testing.assert_close(replay_first, original_first, rtol=0.0, atol=1e-12)
     torch.testing.assert_close(replay_final, original_final, rtol=0.0, atol=1e-12)
+    torch.testing.assert_close(debug_final, replay_final, rtol=0.0, atol=0.0)
+    for step in (0, 1):
+        payload = torch.load(
+            debug_dir / f"reverse_debug_step_{step:03d}.pt",
+            map_location="cpu",
+        )
+        assert tuple(payload) == (
+            "input_points",
+            "forward_time",
+            "time_batch",
+            "raw_score",
+            "projector",
+            "projected_score",
+            "raw_noise",
+            "projected_noise",
+            "dt",
+            "sqrt_dt",
+            "tangent_increment",
+            "output_points",
+        )
+    debug_comparison = compare_debug_directories(debug_dir, debug_dir)
+    assert debug_comparison["first_difference"] is None
 
 
 def test_skip_training_requires_model_path(monkeypatch, tmp_path):
@@ -345,3 +404,39 @@ def test_skip_training_requires_model_path(monkeypatch, tmp_path):
     )
     with pytest.raises(SystemExit):
         runner.parse_args()
+
+
+def test_reverse_debug_comparator_reports_first_tensor_difference(tmp_path):
+    left_dir = tmp_path / "left"
+    right_dir = tmp_path / "right"
+    left_dir.mkdir()
+    right_dir.mkdir()
+    for step in (0, 1):
+        payload = {
+            name: torch.zeros(2, dtype=torch.float64)
+            for name in (
+                "input_points",
+                "forward_time",
+                "time_batch",
+                "raw_score",
+                "projector",
+                "projected_score",
+                "raw_noise",
+                "projected_noise",
+                "dt",
+                "sqrt_dt",
+                "tangent_increment",
+                "output_points",
+            )
+        }
+        torch.save(payload, left_dir / f"reverse_debug_step_{step:03d}.pt")
+        right_payload = {key: value.clone() for key, value in payload.items()}
+        if step == 0:
+            right_payload["raw_score"][0] = 0.25
+        torch.save(right_payload, right_dir / f"reverse_debug_step_{step:03d}.pt")
+
+    comparison = compare_debug_directories(left_dir, right_dir)
+
+    assert comparison["first_differing_step"] == 0
+    assert comparison["first_differing_tensor_name"] == "raw_score"
+    assert comparison["first_difference"]["max_abs_error"] == 0.25
