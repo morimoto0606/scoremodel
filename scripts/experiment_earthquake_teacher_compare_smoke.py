@@ -464,6 +464,31 @@ def _build_saved_model_architecture(
 ):
     """Build the classes returned by the original two training functions."""
 
+    normalized_model = _build_normalized_saved_model(
+        hidden=hidden,
+        n_blocks=n_blocks,
+        num_frequencies=num_frequencies,
+        dtype=dtype,
+        device=device,
+    )
+    if teacher == "malliavin":
+        return S2SkorokhodScoreModel(normalized_model).to(
+            device=device,
+            dtype=dtype,
+        )
+    return normalized_model
+
+
+def _build_normalized_saved_model(
+    *,
+    hidden: int,
+    n_blocks: int,
+    num_frequencies: int,
+    dtype: torch.dtype,
+    device: str,
+):
+    """Construct the normalized network before the optional S2 wrapper."""
+
     network = MirafzaliSkorokhodNet(
         x_dim=3,
         out_dim=3,
@@ -471,24 +496,24 @@ def _build_saved_model_architecture(
         n_blocks=n_blocks,
         num_frequencies=num_frequencies,
     ).to(device=device, dtype=dtype)
-    zeros_vector = torch.zeros(1, 3, dtype=dtype, device=device)
-    ones_vector = torch.ones(1, 3, dtype=dtype, device=device)
-    zeros_time = torch.zeros(1, 1, dtype=dtype, device=device)
-    ones_time = torch.ones(1, 1, dtype=dtype, device=device)
+    # These must be distinct tensors.  register_buffer keeps the supplied
+    # storage, so reusing one zero/one tensor for both x and y causes the later
+    # y_mean/y_std load_state_dict copies to overwrite x_mean/x_std as well.
+    x_mean = torch.zeros(1, 3, dtype=dtype, device=device)
+    x_std = torch.ones(1, 3, dtype=dtype, device=device)
+    t_mean = torch.zeros(1, 1, dtype=dtype, device=device)
+    t_std = torch.ones(1, 1, dtype=dtype, device=device)
+    y_mean = torch.zeros(1, 3, dtype=dtype, device=device)
+    y_std = torch.ones(1, 3, dtype=dtype, device=device)
     normalized_model = NormalizedSkorokhodModel(
         network,
-        zeros_vector,
-        ones_vector,
-        zeros_time,
-        ones_time,
-        zeros_vector,
-        ones_vector,
+        x_mean,
+        x_std,
+        t_mean,
+        t_std,
+        y_mean,
+        y_std,
     ).to(device=device, dtype=dtype)
-    if teacher == "malliavin":
-        return S2SkorokhodScoreModel(normalized_model).to(
-            device=device,
-            dtype=dtype,
-        )
     return normalized_model
 
 
@@ -533,6 +558,135 @@ def build_model_from_training_checkpoint(model_path: Path, *, device: str):
         device=device,
     )
     return _load_saved_model_state(model, model_path)
+
+
+NORMALIZATION_BUFFER_NAMES = (
+    "x_mean",
+    "x_std",
+    "t_mean",
+    "t_std",
+    "y_mean",
+    "y_std",
+)
+
+
+def _append_normalization_stage(
+    trace: Dict[str, object],
+    *,
+    stage: str,
+    normalized_model: NormalizedSkorokhodModel,
+    checkpoint_state: Dict[str, torch.Tensor],
+    checkpoint_prefix: str,
+) -> None:
+    buffers = {}
+    stage_matches = True
+    for name in NORMALIZATION_BUFFER_NAMES:
+        checkpoint_key = f"{checkpoint_prefix}{name}"
+        checkpoint_value = checkpoint_state[checkpoint_key].detach().cpu()
+        current_value = getattr(normalized_model, name).detach().cpu()
+        same_shape = tuple(checkpoint_value.shape) == tuple(current_value.shape)
+        same_dtype = checkpoint_value.dtype == current_value.dtype
+        exact_equal = bool(
+            same_shape and same_dtype and torch.equal(checkpoint_value, current_value)
+        )
+        if same_shape:
+            max_abs_error = float(
+                torch.max(
+                    torch.abs(
+                        checkpoint_value.to(torch.float64)
+                        - current_value.to(torch.float64)
+                    )
+                )
+            )
+        else:
+            max_abs_error = None
+        stage_matches = stage_matches and exact_equal
+        buffers[name] = {
+            "checkpoint_key": checkpoint_key,
+            "checkpoint_value": checkpoint_value.tolist(),
+            "current_value": current_value.tolist(),
+            "checkpoint_shape": list(checkpoint_value.shape),
+            "current_shape": list(current_value.shape),
+            "checkpoint_dtype": str(checkpoint_value.dtype),
+            "current_dtype": str(current_value.dtype),
+            "max_abs_error": max_abs_error,
+            "exact_equal": exact_equal,
+        }
+    trace["stages"].append(
+        {
+            "stage": stage,
+            "all_normalization_buffers_exact": stage_matches,
+            "buffers": buffers,
+        }
+    )
+
+
+def build_model_from_training_checkpoint_with_normalization_trace(
+    model_path: Path,
+    *,
+    device: str,
+) -> tuple[object, Dict[str, object], NormalizedSkorokhodModel, str]:
+    """Rebuild the training model while tracing normalization-buffer stages."""
+
+    checkpoint = torch.load(model_path, map_location="cpu")
+    teacher = str(checkpoint["teacher"])
+    dtype = to_dtype(str(checkpoint["dtype"]))
+    normalized_model = _build_normalized_saved_model(
+        hidden=int(checkpoint["hidden"]),
+        n_blocks=int(checkpoint["n_blocks"]),
+        num_frequencies=int(checkpoint["num_frequencies"]),
+        dtype=dtype,
+        device=device,
+    )
+    checkpoint_prefix = "skorokhod_network." if teacher == "malliavin" else ""
+    trace: Dict[str, object] = {
+        "teacher": teacher,
+        "model_path": str(model_path),
+        "checkpoint_prefix": checkpoint_prefix,
+        "stages": [],
+    }
+    _append_normalization_stage(
+        trace,
+        stage="1_constructor_immediately_after",
+        normalized_model=normalized_model,
+        checkpoint_state=checkpoint["state_dict"],
+        checkpoint_prefix=checkpoint_prefix,
+    )
+
+    if teacher == "malliavin":
+        inner_state = {
+            key.removeprefix(checkpoint_prefix): value
+            for key, value in checkpoint["state_dict"].items()
+            if key.startswith(checkpoint_prefix)
+        }
+    else:
+        inner_state = checkpoint["state_dict"]
+    normalized_model.load_state_dict(inner_state, strict=True)
+    normalized_model.eval()
+    _append_normalization_stage(
+        trace,
+        stage="2_load_state_dict_immediately_after",
+        normalized_model=normalized_model,
+        checkpoint_state=checkpoint["state_dict"],
+        checkpoint_prefix=checkpoint_prefix,
+    )
+
+    if teacher == "malliavin":
+        model = S2SkorokhodScoreModel(normalized_model).to(
+            device=device,
+            dtype=dtype,
+        )
+    else:
+        model = normalized_model
+    model.eval()
+    _append_normalization_stage(
+        trace,
+        stage="3_wrapper_immediately_after",
+        normalized_model=normalized_model,
+        checkpoint_state=checkpoint["state_dict"],
+        checkpoint_prefix=checkpoint_prefix,
+    )
+    return model, trace, normalized_model, checkpoint_prefix
 
 
 def build_model_from_checkpoint_metadata(model_path: Path, *, device: str):
@@ -600,7 +754,7 @@ def compare_checkpoint_state(model, model_path: Path) -> Dict[str, object]:
         same_shape = tuple(checkpoint_value.shape) == tuple(restored_value.shape)
         if same_shape:
             checkpoint_cpu = checkpoint_value.detach().cpu()
-            restored_cpu = restored_value.detach().cpu().to(checkpoint_cpu.dtype)
+            restored_cpu = restored_value.detach().cpu()
             max_abs_error = float(
                 torch.max(
                     torch.abs(
@@ -609,7 +763,10 @@ def compare_checkpoint_state(model, model_path: Path) -> Dict[str, object]:
                     )
                 )
             )
-            exact_equal = bool(torch.equal(checkpoint_cpu, restored_cpu))
+            exact_equal = bool(
+                checkpoint_cpu.dtype == restored_cpu.dtype
+                and torch.equal(checkpoint_cpu, restored_cpu)
+            )
             overall_max_abs_error = max(overall_max_abs_error, max_abs_error)
         else:
             max_abs_error = None
@@ -636,6 +793,46 @@ def compare_checkpoint_state(model, model_path: Path) -> Dict[str, object]:
         "overall_max_abs_error": overall_max_abs_error,
         "first_mismatching_key": first_mismatching_key,
     }
+
+
+def finalize_normalization_trace(trace: Dict[str, object]) -> None:
+    """Record the first post-load stage where normalization stops matching."""
+
+    stages = trace["stages"]
+    trace["first_stage_not_matching_checkpoint"] = next(
+        (
+            stage["stage"]
+            for stage in stages
+            if not stage["all_normalization_buffers_exact"]
+        ),
+        None,
+    )
+    trace["first_post_load_mismatch_stage"] = next(
+        (
+            stage["stage"]
+            for stage in stages[1:]
+            if not stage["all_normalization_buffers_exact"]
+        ),
+        None,
+    )
+
+
+def require_exact_checkpoint_state(model, model_path: Path) -> Dict[str, object]:
+    """Fail unless every final model state tensor exactly matches model.pt."""
+
+    comparison = compare_checkpoint_state(model, model_path)
+    if (
+        comparison["missing_keys"]
+        or comparison["unexpected_keys"]
+        or comparison["first_mismatching_key"] is not None
+        or comparison["overall_max_abs_error"] != 0.0
+    ):
+        raise AssertionError(
+            "final replay model does not exactly match checkpoint state: "
+            f"first_mismatching_key={comparison['first_mismatching_key']!r}, "
+            f"overall_max_abs_error={comparison['overall_max_abs_error']}"
+        )
+    return comparison
 
 
 def compare_model_reconstruction_paths(
@@ -1100,8 +1297,23 @@ def run_saved_model_evaluation(
     log(f"loading saved {teacher} model from {model_path}")
     checkpoint = torch.load(model_path, map_location="cpu")
     model_a = build_model_from_run_config(model_path, source_config, device=device)
-    model_b = build_model_from_training_checkpoint(model_path, device=device)
+    (
+        model_b,
+        normalization_trace,
+        normalized_model_b,
+        checkpoint_prefix_b,
+    ) = build_model_from_training_checkpoint_with_normalization_trace(
+        model_path,
+        device=device,
+    )
     model_c = build_model_from_checkpoint_metadata(model_path, device=device)
+    _append_normalization_stage(
+        normalization_trace,
+        stage="4_fixed_input_evaluation_immediately_before",
+        normalized_model=normalized_model_b,
+        checkpoint_state=checkpoint["state_dict"],
+        checkpoint_prefix=checkpoint_prefix_b,
+    )
     model_output_comparison = compare_model_reconstruction_paths(
         teacher=teacher,
         run_config=source_config,
@@ -1119,11 +1331,6 @@ def run_saved_model_evaluation(
     # Replay uses the original training-path wrapper and checkpoint metadata.
     model = model_b
     model_state_error = checkpoint_state_max_abs_error(model, model_path)
-    state_comparison = compare_checkpoint_state(model, model_path)
-    with (output_dir / "checkpoint_state_comparison.json").open(
-        "w", encoding="utf-8"
-    ) as handle:
-        json.dump(state_comparison, handle, indent=2)
     inventory = checkpoint_inventory(model_path)
     with (output_dir / "checkpoint_inventory.json").open(
         "w", encoding="utf-8"
@@ -1201,6 +1408,26 @@ def run_saved_model_evaluation(
         reverse_noise_coupling_exact = (
             MAX_REVERSE_NOISE_STEPS % reverse_steps == 0
         )
+
+    _append_normalization_stage(
+        normalization_trace,
+        stage="5_reverse_sampling_immediately_before",
+        normalized_model=normalized_model_b,
+        checkpoint_state=checkpoint["state_dict"],
+        checkpoint_prefix=checkpoint_prefix_b,
+    )
+    finalize_normalization_trace(normalization_trace)
+    with (output_dir / "normalization_state_stages.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(normalization_trace, handle, indent=2)
+    # This is the final gate immediately before reverse sampling.
+    state_comparison = compare_checkpoint_state(model, model_path)
+    with (output_dir / "checkpoint_state_comparison.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(state_comparison, handle, indent=2)
+    require_exact_checkpoint_state(model, model_path)
 
     reverse_started = time.perf_counter()
     reverse_result = s2_reverse_grw(

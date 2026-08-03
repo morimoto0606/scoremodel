@@ -28,18 +28,20 @@ def _saved_model(tmp_path, teacher):
         n_blocks=config["n_blocks"],
         num_frequencies=config["num_frequencies"],
     ).double()
-    vector_zero = torch.zeros(1, 3, dtype=torch.float64)
-    vector_one = torch.ones(1, 3, dtype=torch.float64)
-    time_zero = torch.zeros(1, 1, dtype=torch.float64)
-    time_one = torch.ones(1, 1, dtype=torch.float64)
+    x_mean = torch.tensor([[0.0521, 0.1777, 0.3091]], dtype=torch.float64)
+    x_std = torch.tensor([[0.5555, 0.6081, 0.4385]], dtype=torch.float64)
+    t_mean = torch.tensor([[0.1543]], dtype=torch.float64)
+    t_std = torch.tensor([[0.0873]], dtype=torch.float64)
+    y_mean = torch.tensor([[-0.0248, 0.3799, 0.5936]], dtype=torch.float64)
+    y_std = torch.tensor([[3.0537, 3.0087, 3.1578]], dtype=torch.float64)
     model = NormalizedSkorokhodModel(
         network,
-        vector_zero,
-        vector_one,
-        time_zero,
-        time_one,
-        vector_zero,
-        vector_one,
+        x_mean,
+        x_std,
+        t_mean,
+        t_std,
+        y_mean,
+        y_std,
     ).double()
     if teacher == "malliavin":
         model = S2SkorokhodScoreModel(model)
@@ -143,6 +145,40 @@ def test_normalization_buffers_are_restored_from_checkpoint(tmp_path, teacher):
     assert state_comparison["unexpected_keys"] == []
     assert state_comparison["overall_max_abs_error"] == 0.0
     assert state_comparison["first_mismatching_key"] is None
+    traced_model, trace, normalized_model, prefix = (
+        runner.build_model_from_training_checkpoint_with_normalization_trace(
+            model_path,
+            device="cpu",
+        )
+    )
+    assert normalized_model.x_mean.data_ptr() != normalized_model.y_mean.data_ptr()
+    assert normalized_model.x_std.data_ptr() != normalized_model.y_std.data_ptr()
+    checkpoint_state = torch.load(model_path, map_location="cpu")["state_dict"]
+    runner._append_normalization_stage(
+        trace,
+        stage="4_fixed_input_evaluation_immediately_before",
+        normalized_model=normalized_model,
+        checkpoint_state=checkpoint_state,
+        checkpoint_prefix=prefix,
+    )
+    runner._append_normalization_stage(
+        trace,
+        stage="5_reverse_sampling_immediately_before",
+        normalized_model=normalized_model,
+        checkpoint_state=checkpoint_state,
+        checkpoint_prefix=prefix,
+    )
+    runner.finalize_normalization_trace(trace)
+    assert not trace["stages"][0]["all_normalization_buffers_exact"]
+    assert all(
+        stage["all_normalization_buffers_exact"] for stage in trace["stages"][1:]
+    )
+    assert trace["first_post_load_mismatch_stage"] is None
+    exact_final_state = runner.require_exact_checkpoint_state(
+        traced_model,
+        model_path,
+    )
+    assert exact_final_state["first_mismatching_key"] is None
     for key in expected_buffer_keys:
         assert inventory["state_dict"][key]["shape"] in ([1, 3], [1, 1])
 
