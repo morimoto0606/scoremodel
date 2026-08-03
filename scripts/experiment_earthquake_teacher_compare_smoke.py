@@ -6,8 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import warnings
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Sequence, Tuple
 
 import torch
 
@@ -29,6 +30,21 @@ from scoremodel_ext.manifold.s2_malliavin import (
 )
 
 
+CURATED_LOWT_TIMES: Tuple[float, ...] = (
+    0.005,
+    0.010,
+    0.020,
+    0.035,
+    0.050,
+    0.075,
+    0.100,
+    0.150,
+    0.200,
+    0.250,
+    0.300,
+)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--teacher", choices=("heat", "varadhan", "malliavin"), required=True)
@@ -43,6 +59,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-steps", type=int, default=8)
     parser.add_argument("--minimum-time", type=float, default=0.05)
     parser.add_argument("--maximum-time", type=float, default=0.3)
+    parser.add_argument(
+        "--time-sampling",
+        choices=("uniform", "curated-lowt"),
+        default="uniform",
+    )
+    parser.add_argument("--time-samples-path", type=Path, default=None)
+    parser.add_argument("--validation-time-samples-path", type=Path, default=None)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
@@ -79,6 +102,173 @@ def resolve_device(name: str) -> str:
 
 def normalize(points: torch.Tensor) -> torch.Tensor:
     return points / torch.linalg.vector_norm(points, dim=1, keepdim=True).clamp_min(1e-12)
+
+
+def sample_curated_lowt_times(
+    n_samples: int,
+    *,
+    dtype: torch.dtype,
+    device: str,
+    seed: int,
+    curated_times: Sequence[float] = CURATED_LOWT_TIMES,
+) -> torch.Tensor:
+    """Sample the curated grid with counts differing by at most one."""
+
+    if n_samples < 1:
+        raise ValueError("n_samples must be positive")
+    candidates = torch.tensor(curated_times, dtype=dtype, device=device)
+    base_count, remainder = divmod(n_samples, candidates.numel())
+    counts = torch.full(
+        (candidates.numel(),),
+        base_count,
+        dtype=torch.long,
+        device=device,
+    )
+    counts[:remainder] += 1
+    samples = torch.repeat_interleave(candidates, counts)
+    generator = torch.Generator(device=device)
+    generator.manual_seed(seed)
+    permutation = torch.randperm(n_samples, generator=generator, device=device)
+    return samples[permutation]
+
+
+def create_time_samples(
+    *,
+    train_size: int,
+    validation_size: int,
+    time_sampling: str,
+    minimum_time: float,
+    maximum_time: float,
+    dtype: torch.dtype,
+    device: str,
+    seed: int,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Create train/validation times while preserving legacy uniform draws."""
+
+    if time_sampling == "uniform":
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed)
+        train_times = torch.empty(train_size, dtype=dtype, device=device).uniform_(
+            minimum_time,
+            maximum_time,
+            generator=generator,
+        )
+        validation_times = torch.empty(
+            validation_size,
+            dtype=dtype,
+            device=device,
+        ).uniform_(
+            minimum_time,
+            maximum_time,
+            generator=generator,
+        )
+        return train_times, validation_times
+
+    if time_sampling != "curated-lowt":
+        raise ValueError(f"unknown time_sampling: {time_sampling!r}")
+    if minimum_time > CURATED_LOWT_TIMES[0] or maximum_time < CURATED_LOWT_TIMES[-1]:
+        raise ValueError(
+            "curated-lowt requires minimum_time <= 0.005 and maximum_time >= 0.3"
+        )
+    return (
+        sample_curated_lowt_times(
+            train_size,
+            dtype=dtype,
+            device=device,
+            seed=seed,
+        ),
+        sample_curated_lowt_times(
+            validation_size,
+            dtype=dtype,
+            device=device,
+            seed=seed + 1,
+        ),
+    )
+
+
+def _time_tensor_from_payload(payload, *, key: str) -> torch.Tensor:
+    if isinstance(payload, torch.Tensor):
+        return payload
+    if isinstance(payload, dict) and key in payload:
+        return payload[key]
+    raise ValueError(f"time sample artifact does not contain {key!r}")
+
+
+def load_time_samples(
+    *,
+    train_path: Path,
+    validation_path: Path | None,
+    dtype: torch.dtype,
+    device: str,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Load new split artifacts or the legacy combined dictionary artifact."""
+
+    train_payload = torch.load(train_path, map_location="cpu")
+    train_times = _time_tensor_from_payload(train_payload, key="train_times")
+    if validation_path is None:
+        validation_times = _time_tensor_from_payload(
+            train_payload,
+            key="validation_times",
+        )
+    else:
+        validation_payload = torch.load(validation_path, map_location="cpu")
+        validation_times = _time_tensor_from_payload(
+            validation_payload,
+            key="validation_times",
+        )
+    return (
+        train_times.detach().to(device=device, dtype=dtype),
+        validation_times.detach().to(device=device, dtype=dtype),
+    )
+
+
+def validate_time_samples(
+    train_times: torch.Tensor,
+    validation_times: torch.Tensor,
+    *,
+    train_size: int,
+    validation_size: int,
+    time_sampling: str,
+) -> None:
+    if train_times.shape != (train_size,):
+        raise ValueError(f"train time samples must have shape {(train_size,)}")
+    if validation_times.shape != (validation_size,):
+        raise ValueError(
+            f"validation time samples must have shape {(validation_size,)}"
+        )
+    if not bool(torch.isfinite(train_times).all()) or not bool(
+        torch.isfinite(validation_times).all()
+    ):
+        raise ValueError("time samples must be finite")
+    if time_sampling == "curated-lowt":
+        candidates = torch.tensor(
+            CURATED_LOWT_TIMES,
+            dtype=train_times.dtype,
+            device=train_times.device,
+        )
+        for name, values in (
+            ("train", train_times),
+            ("validation", validation_times),
+        ):
+            is_curated = torch.isclose(
+                values[:, None],
+                candidates[None, :],
+                rtol=0.0,
+                atol=1e-12,
+            ).any(dim=1)
+            if not bool(is_curated.all()):
+                raise ValueError(f"{name} time samples contain non-curated values")
+
+
+def save_time_samples(
+    train_times: torch.Tensor,
+    validation_times: torch.Tensor,
+    *,
+    train_path: Path,
+    validation_path: Path,
+) -> None:
+    torch.save(train_times.detach().cpu(), train_path)
+    torch.save(validation_times.detach().cpu(), validation_path)
 
 
 def compute_split_indices(
@@ -294,6 +484,98 @@ def finite_rate(samples: torch.Tensor) -> float:
     return float(torch.isfinite(samples).all(dim=1).double().mean())
 
 
+def _nearest_curated_time_index(times: torch.Tensor) -> torch.Tensor:
+    candidates = torch.tensor(
+        CURATED_LOWT_TIMES,
+        dtype=times.dtype,
+        device=times.device,
+    )
+    return torch.argmin(torch.abs(times[:, None] - candidates[None, :]), dim=1)
+
+
+def time_histogram(times: torch.Tensor) -> Dict[str, int]:
+    """Count samples in bins centered at the shared curated time grid."""
+
+    assignment = _nearest_curated_time_index(times)
+    return {
+        f"{candidate:.3f}": int((assignment == index).sum().detach().cpu())
+        for index, candidate in enumerate(CURATED_LOWT_TIMES)
+    }
+
+
+def samples_per_curated_time(times: torch.Tensor) -> list[int]:
+    """Return exact curated counts aligned with ``CURATED_LOWT_TIMES``."""
+
+    return [
+        int(
+            torch.isclose(
+                times,
+                torch.tensor(candidate, dtype=times.dtype, device=times.device),
+                rtol=0.0,
+                atol=1e-12,
+            )
+            .sum()
+            .detach()
+            .cpu()
+        )
+        for candidate in CURATED_LOWT_TIMES
+    ]
+
+
+def time_target_diagnostics(
+    dataset: Dict[str, torch.Tensor],
+    *,
+    target_key: str,
+) -> list[dict]:
+    """Summarize target magnitude and time-local dispersion on shared bins.
+
+    ``time_bin_target_dispersion`` is the RMS deviation from the mean target
+    within a time bin divided by target RMS in that bin.
+    """
+
+    times = dataset["time"].detach()
+    targets = dataset[target_key].detach()
+    assignment = _nearest_curated_time_index(times)
+    rows = []
+    for index, candidate in enumerate(CURATED_LOWT_TIMES):
+        mask = assignment == index
+        count = int(mask.sum().detach().cpu())
+        if count == 0:
+            rows.append(
+                {
+                    "time": candidate,
+                    "count": 0,
+                    "target_norm_mean": None,
+                    "target_norm_std": None,
+                    "time_bin_target_dispersion": None,
+                }
+            )
+            continue
+        selected = targets[mask]
+        norms = torch.linalg.vector_norm(selected, dim=1)
+        centered = selected - selected.mean(dim=0, keepdim=True)
+        residual_rms = torch.sqrt(torch.mean(torch.sum(centered**2, dim=1)))
+        target_rms = torch.sqrt(torch.mean(torch.sum(selected**2, dim=1)))
+        rows.append(
+            {
+                "time": candidate,
+                "count": count,
+                "target_norm_mean": float(norms.mean().detach().cpu()),
+                "target_norm_std": float(
+                    norms.std(unbiased=False).detach().cpu()
+                ),
+                "time_bin_target_dispersion": float(
+                    (residual_rms / target_rms.clamp_min(1e-12)).detach().cpu()
+                ),
+            }
+        )
+    return rows
+
+
+def diagnostic_target_key_for_teacher(teacher: str) -> str:
+    return "skorokhod" if teacher == "malliavin" else "score_target"
+
+
 def main() -> None:
     args = parse_args()
     output_dir = args.output_dir.resolve()
@@ -319,11 +601,15 @@ def main() -> None:
             args.terminal_samples_path = heat_dir / "terminal_samples.pt"
         if args.reverse_noise_path is None and (heat_dir / "reverse_noise.pt").exists():
             args.reverse_noise_path = heat_dir / "reverse_noise.pt"
-
-    run_config = vars(args).copy()
-    run_config["resolved_device"] = device
-    with (output_dir / "run_config.json").open("w", encoding="utf-8") as handle:
-        json.dump(run_config, handle, indent=2, default=str)
+        if (
+            args.time_samples_path is None
+            and args.validation_time_samples_path is None
+            and (heat_dir / "time_samples.pt").exists()
+        ):
+            args.time_samples_path = heat_dir / "time_samples.pt"
+            validation_time_path = heat_dir / "validation_time_samples.pt"
+            if validation_time_path.exists():
+                args.validation_time_samples_path = validation_time_path
 
     log(f"loading earthquake points from {args.data_path}")
     points = load_earthquake_points(args.data_path, dtype=dtype, device=device)
@@ -342,38 +628,96 @@ def main() -> None:
     validation_initial = normalize(points[validation_idx.to(device=device)])
 
     time_samples_path = output_dir / "time_samples.pt"
+    validation_time_samples_path = output_dir / "validation_time_samples.pt"
     noise_samples_path = output_dir / "teacher_noises.pt"
     if args.teacher != "heat":
         sibling = output_dir.parent / "heat"
-        sibling_time = sibling / "time_samples.pt"
         sibling_noise = sibling / "teacher_noises.pt"
     else:
-        sibling_time = None
         sibling_noise = None
 
-    if sibling_time is not None and sibling_time.exists():
-        payload = torch.load(sibling_time, map_location="cpu")
-        train_times = payload["train_times"].to(device=device, dtype=dtype)
-        validation_times = payload["validation_times"].to(device=device, dtype=dtype)
+    if (
+        args.time_samples_path is None
+        and args.validation_time_samples_path is not None
+    ):
+        raise ValueError(
+            "--validation-time-samples-path requires --time-samples-path"
+        )
+    if args.time_samples_path is not None:
+        if not args.time_samples_path.exists():
+            raise FileNotFoundError(
+                f"missing train time samples: {args.time_samples_path}"
+            )
+        if (
+            args.validation_time_samples_path is not None
+            and not args.validation_time_samples_path.exists()
+        ):
+            raise FileNotFoundError(
+                "missing validation time samples: "
+                f"{args.validation_time_samples_path}"
+            )
+        train_times, validation_times = load_time_samples(
+            train_path=args.time_samples_path,
+            validation_path=args.validation_time_samples_path,
+            dtype=dtype,
+            device=device,
+        )
     else:
-        time_generator = torch.Generator(device=device)
-        time_generator.manual_seed(args.seed)
-        train_times = torch.empty(args.train_size, dtype=dtype, device=device).uniform_(
-            args.minimum_time,
-            args.maximum_time,
-            generator=time_generator,
+        train_times, validation_times = create_time_samples(
+            train_size=args.train_size,
+            validation_size=args.validation_size,
+            time_sampling=args.time_sampling,
+            minimum_time=args.minimum_time,
+            maximum_time=args.maximum_time,
+            dtype=dtype,
+            device=device,
+            seed=args.seed,
         )
-        validation_times = torch.empty(args.validation_size, dtype=dtype, device=device).uniform_(
-            args.minimum_time,
-            args.maximum_time,
-            generator=time_generator,
-        )
-    torch.save(
+    validate_time_samples(
+        train_times,
+        validation_times,
+        train_size=args.train_size,
+        validation_size=args.validation_size,
+        time_sampling=args.time_sampling,
+    )
+    save_time_samples(
+        train_times,
+        validation_times,
+        train_path=time_samples_path,
+        validation_path=validation_time_samples_path,
+    )
+    time_histograms = {
+        "train": time_histogram(train_times),
+        "validation": time_histogram(validation_times),
+    }
+    samples_per_time = {
+        "train": (
+            samples_per_curated_time(train_times)
+            if args.time_sampling == "curated-lowt"
+            else None
+        ),
+        "validation": (
+            samples_per_curated_time(validation_times)
+            if args.time_sampling == "curated-lowt"
+            else None
+        ),
+    }
+
+    run_config = vars(args).copy()
+    run_config.update(
         {
-            "train_times": train_times.detach().cpu(),
-            "validation_times": validation_times.detach().cpu(),
-        },
-        time_samples_path,
+            "resolved_device": device,
+            "curated_times": list(CURATED_LOWT_TIMES),
+            "time_histogram": time_histograms,
+            "samples_per_time": samples_per_time,
+        }
+    )
+    with (output_dir / "run_config.json").open("w", encoding="utf-8") as handle:
+        json.dump(run_config, handle, indent=2, default=str)
+    log(
+        f"time samples ready: mode={args.time_sampling} "
+        f"train={time_samples_path.name} "
+        f"validation={validation_time_samples_path.name}"
     )
 
     if sibling_noise is not None and sibling_noise.exists():
@@ -513,6 +857,17 @@ def main() -> None:
     geodesic = nearest_neighbor_geodesic_summary(generated_cpu, validation_initial.detach().cpu(), seed=args.seed)
     norm_error = generated_norm_error(generated_cpu)
     sample_finite_rate = finite_rate(generated_cpu)
+    diagnostic_target_key = diagnostic_target_key_for_teacher(args.teacher)
+    time_diagnostics = {
+        "train": time_target_diagnostics(
+            train_dataset,
+            target_key=diagnostic_target_key,
+        ),
+        "validation": time_target_diagnostics(
+            validation_dataset,
+            target_key=diagnostic_target_key,
+        ),
+    }
 
     metrics = {
         "teacher": args.teacher,
@@ -532,6 +887,16 @@ def main() -> None:
         "nan_rate": 1.0 - sample_finite_rate,
         "generated_all_finite": bool(sample_finite_rate == 1.0),
         "generated_sample_count": int(generated_cpu.shape[0]),
+        "time_sampling": args.time_sampling,
+        "curated_times": list(CURATED_LOWT_TIMES),
+        "time_histogram": time_histograms,
+        "samples_per_time": samples_per_time,
+        "time_diagnostics": time_diagnostics,
+        "diagnostic_target_key": diagnostic_target_key,
+        "time_bin_target_dispersion_definition": (
+            f"Within each shared time bin: RMS({diagnostic_target_key} - "
+            f"bin mean) / RMS({diagnostic_target_key})."
+        ),
         "device": device,
         "dtype": args.dtype,
     }
@@ -542,41 +907,89 @@ def main() -> None:
     log(f"final_train_loss={final_train_loss:.6e} validation_loss={validation_loss:.6e}")
     log(f"mmd={mmd_value:.6e} geodesic_mean={geodesic['mean']:.6e} norm_error={norm_error:.6e}")
 
-    if not args.skip_viz:
-        from scoremodel_ext.manifold.earthquake_smoke_viz import generate_earthquake_smoke_plots
+    if not args.skip_viz or args.teacher == "malliavin":
+        from scoremodel_ext.manifold.earthquake_smoke_viz import (
+            generate_earthquake_density_plots,
+            generate_earthquake_smoke_plots,
+        )
 
-        viz_dir = args.viz_output_dir.resolve() if args.viz_output_dir is not None else output_dir
-        teacher_generated: Dict[str, torch.Tensor] = {args.teacher: generated_cpu}
+        if args.viz_output_dir is not None:
+            viz_dir = args.viz_output_dir.resolve()
+        elif args.teacher == "malliavin":
+            viz_dir = output_dir.parent
+        else:
+            viz_dir = output_dir
+
+        teacher_generated: Dict[str, torch.Tensor] = {}
+        for teacher_name in ("heat", "varadhan", "malliavin"):
+            generated_path = output_dir.parent / teacher_name / "generated_samples.pt"
+            if generated_path.exists():
+                teacher_generated[teacher_name] = torch.load(
+                    generated_path,
+                    map_location="cpu",
+                )
+            elif teacher_name == args.teacher:
+                teacher_generated[teacher_name] = generated_cpu
+            elif args.teacher == "malliavin":
+                warnings.warn(
+                    f"missing {teacher_name} density artifact: {generated_path}; "
+                    "generating comparison with available teachers",
+                    RuntimeWarning,
+                    stacklevel=1,
+                )
+
         teacher_history: Dict[str, Dict[str, list[float]]] = {
             args.teacher: {
                 "epochs": [int(x) for x in history.get("epochs", [])],
                 "train_loss": [float(x) for x in history.get("train_loss", [])],
             }
         }
+        teacher_time_diagnostics: Dict[str, list[dict]] = {
+            args.teacher: time_diagnostics["validation"]
+        }
 
         for other in ("heat", "varadhan", "malliavin"):
             if other == args.teacher:
                 continue
             other_run = output_dir.parent / other
-            other_generated_path = other_run / "generated_samples.pt"
             other_history_path = other_run / "training_history.json"
-            if other_generated_path.exists() and other_history_path.exists():
-                teacher_generated[other] = torch.load(other_generated_path, map_location="cpu")
+            other_metrics_path = other_run / "metrics.json"
+            if other_history_path.exists():
                 with other_history_path.open("r", encoding="utf-8") as handle:
                     loaded = json.load(handle)
                 teacher_history[other] = {
                     "epochs": [int(x) for x in loaded.get("epochs", [])],
                     "train_loss": [float(x) for x in loaded.get("train_loss", [])],
                 }
+                if other_metrics_path.exists():
+                    with other_metrics_path.open("r", encoding="utf-8") as handle:
+                        other_metrics = json.load(handle)
+                    validation_diagnostics = other_metrics.get(
+                        "time_diagnostics", {}
+                    ).get("validation")
+                    if validation_diagnostics:
+                        teacher_time_diagnostics[other] = validation_diagnostics
 
-        generate_earthquake_smoke_plots(
-            observed_points=torch.cat((train_initial, validation_initial), dim=0).detach().cpu(),
-            observed_train_points=train_initial.detach().cpu(),
-            observed_test_points=validation_initial.detach().cpu(),
-            generated_by_teacher=teacher_generated,
-            training_history_by_teacher=teacher_history,
-            output_dir=viz_dir,
-        )
+        if args.skip_viz:
+            generate_earthquake_density_plots(
+                observed_train_points=train_initial.detach().cpu(),
+                observed_validation_points=validation_initial.detach().cpu(),
+                generated_by_teacher=teacher_generated,
+                output_dir=viz_dir,
+            )
+        else:
+            generate_earthquake_smoke_plots(
+                observed_points=torch.cat(
+                    (train_initial, validation_initial),
+                    dim=0,
+                ).detach().cpu(),
+                observed_train_points=train_initial.detach().cpu(),
+                observed_test_points=validation_initial.detach().cpu(),
+                generated_by_teacher=teacher_generated,
+                training_history_by_teacher=teacher_history,
+                time_diagnostics_by_teacher=teacher_time_diagnostics,
+                output_dir=viz_dir,
+            )
 
 
 if __name__ == "__main__":

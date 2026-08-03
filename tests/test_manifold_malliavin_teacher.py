@@ -26,6 +26,7 @@ from scoremodel_ext.manifold.earthquake_adapter import (
     s2_rbf_mmd,
 )
 from scoremodel_ext.manifold import earthquake_adapter as earthquake_adapter_module
+from scoremodel_ext.manifold import earthquake_smoke_viz
 from scripts import reproduce_earthquake_s2_malliavin as earthquake_script
 from scripts import experiment_earthquake_teacher_compare_smoke as earthquake_smoke_script
 from scoremodel_ext.malliavin.models import MirafzaliSkorokhodNet
@@ -115,12 +116,132 @@ def test_mirafzali_network_supports_distinct_input_and_teacher_dimensions():
     assert output.shape == (3, 2)
 
 
-def test_earthquake_malliavin_dataset_can_train_for_multiple_epochs():
+def test_curated_lowt_times_use_only_grid_and_balance_counts():
+    times = earthquake_smoke_script.sample_curated_lowt_times(
+        26,
+        dtype=DTYPE,
+        device="cpu",
+        seed=7,
+    )
+    candidates = torch.tensor(
+        earthquake_smoke_script.CURATED_LOWT_TIMES,
+        dtype=DTYPE,
+    )
+    assert bool(
+        torch.isclose(
+            times[:, None],
+            candidates[None, :],
+            rtol=0.0,
+            atol=1e-12,
+        )
+        .any(dim=1)
+        .all()
+    )
+    counts = earthquake_smoke_script.samples_per_curated_time(times)
+    assert max(counts) - min(counts) <= 1
+    assert counts[:4] == [3, 3, 3, 3]
+    assert counts[4:] == [2] * 7
+
+
+def test_curated_train_validation_dataset_time_shapes_are_correct():
+    train_times, validation_times = earthquake_smoke_script.create_time_samples(
+        train_size=3,
+        validation_size=2,
+        time_sampling="curated-lowt",
+        minimum_time=0.005,
+        maximum_time=0.3,
+        dtype=DTYPE,
+        device="cpu",
+        seed=3,
+    )
+    initial = torch.tensor([[0.0, 0.0, 1.0]], dtype=DTYPE)
+    train_dataset = earthquake_smoke_script.build_teacher_dataset(
+        initial_points=initial.expand(3, -1).clone(),
+        times=train_times,
+        noises=torch.zeros(3, 2, 3, dtype=DTYPE),
+        teacher="varadhan",
+        covariance_regularization=1e-8,
+        heat_terms=30,
+    )
+    validation_dataset = earthquake_smoke_script.build_teacher_dataset(
+        initial_points=initial.expand(2, -1).clone(),
+        times=validation_times,
+        noises=torch.zeros(2, 2, 3, dtype=DTYPE),
+        teacher="varadhan",
+        covariance_regularization=1e-8,
+        heat_terms=30,
+    )
+    assert train_dataset["time"].shape == (3,)
+    assert validation_dataset["time"].shape == (2,)
+
+
+def test_uniform_time_sampling_matches_legacy_draw_order():
+    actual_train, actual_validation = earthquake_smoke_script.create_time_samples(
+        train_size=7,
+        validation_size=5,
+        time_sampling="uniform",
+        minimum_time=0.005,
+        maximum_time=0.3,
+        dtype=DTYPE,
+        device="cpu",
+        seed=11,
+    )
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(11)
+    expected_train = torch.empty(7, dtype=DTYPE).uniform_(
+        0.005, 0.3, generator=generator
+    )
+    expected_validation = torch.empty(5, dtype=DTYPE).uniform_(
+        0.005, 0.3, generator=generator
+    )
+    torch.testing.assert_close(actual_train, expected_train, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        actual_validation,
+        expected_validation,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_time_sample_artifacts_round_trip_exactly(tmp_path):
+    train_times, validation_times = earthquake_smoke_script.create_time_samples(
+        train_size=23,
+        validation_size=13,
+        time_sampling="curated-lowt",
+        minimum_time=0.005,
+        maximum_time=0.3,
+        dtype=DTYPE,
+        device="cpu",
+        seed=5,
+    )
+    train_path = tmp_path / "time_samples.pt"
+    validation_path = tmp_path / "validation_time_samples.pt"
+    earthquake_smoke_script.save_time_samples(
+        train_times,
+        validation_times,
+        train_path=train_path,
+        validation_path=validation_path,
+    )
+    loaded_train, loaded_validation = earthquake_smoke_script.load_time_samples(
+        train_path=train_path,
+        validation_path=validation_path,
+        dtype=DTYPE,
+        device="cpu",
+    )
+    torch.testing.assert_close(loaded_train, train_times, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        loaded_validation,
+        validation_times,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def _build_two_path_earthquake_malliavin_dataset(times):
     initial_points = torch.tensor(
         [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0]],
         dtype=DTYPE,
     )
-    times = torch.tensor([0.1, 0.2], dtype=DTYPE)
     noises = torch.tensor(
         [
             [[0.2, -0.1, 0.3], [0.1, 0.4, -0.2]],
@@ -128,7 +249,7 @@ def test_earthquake_malliavin_dataset_can_train_for_multiple_epochs():
         ],
         dtype=DTYPE,
     )
-    dataset = earthquake_smoke_script.build_teacher_dataset(
+    return earthquake_smoke_script.build_teacher_dataset(
         initial_points=initial_points,
         times=times,
         noises=noises,
@@ -137,8 +258,57 @@ def test_earthquake_malliavin_dataset_can_train_for_multiple_epochs():
         heat_terms=30,
     )
 
+
+def test_earthquake_malliavin_lowt_dataset_is_finite():
+    dataset = _build_two_path_earthquake_malliavin_dataset(
+        torch.tensor([0.005, 0.010], dtype=DTYPE)
+    )
+
+    assert all(
+        torch.isfinite(value).all()
+        for value in dataset.values()
+        if isinstance(value, torch.Tensor)
+    )
+
+
+def test_time_diagnostics_use_teacher_specific_target():
+    assert (
+        earthquake_smoke_script.diagnostic_target_key_for_teacher("malliavin")
+        == "skorokhod"
+    )
+    assert (
+        earthquake_smoke_script.diagnostic_target_key_for_teacher("heat")
+        == "score_target"
+    )
+    assert (
+        earthquake_smoke_script.diagnostic_target_key_for_teacher("varadhan")
+        == "score_target"
+    )
+    dataset = {
+        "time": torch.tensor([0.005, 0.005], dtype=DTYPE),
+        "score_target": torch.zeros(2, 2, dtype=DTYPE),
+        "skorokhod": torch.tensor([[1.0, 0.0], [3.0, 0.0]], dtype=DTYPE),
+    }
+    row = earthquake_smoke_script.time_target_diagnostics(
+        dataset,
+        target_key="skorokhod",
+    )[0]
+    assert row["target_norm_mean"] == 2.0
+    assert row["time_bin_target_dispersion"] > 0.0
+
+
+def test_earthquake_malliavin_dataset_can_train_for_multiple_epochs():
+    dataset = _build_two_path_earthquake_malliavin_dataset(
+        torch.tensor([0.1, 0.2], dtype=DTYPE)
+    )
+
     assert all(
         not value.requires_grad
+        for value in dataset.values()
+        if isinstance(value, torch.Tensor)
+    )
+    assert all(
+        torch.isfinite(value).all()
         for value in dataset.values()
         if isinstance(value, torch.Tensor)
     )
@@ -166,6 +336,73 @@ def test_earthquake_malliavin_dataset_can_train_for_multiple_epochs():
     assert gradients
     assert all(torch.isfinite(gradient).all() for gradient in gradients)
     assert any(bool((gradient != 0).any()) for gradient in gradients)
+
+
+def test_earthquake_density_comparison_has_fixed_four_columns(
+    tmp_path,
+    monkeypatch,
+):
+    train = np.array(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        dtype=np.float64,
+    )
+    validation = np.array([[0.0, 0.0, 1.0]], dtype=np.float64)
+    generated = {
+        "malliavin": np.array([[-1.0, 0.0, 0.0]], dtype=np.float64),
+        "heat": np.array([[0.0, -1.0, 0.0]], dtype=np.float64),
+        "varadhan": np.array([[0.0, 0.0, -1.0]], dtype=np.float64),
+    }
+    kde_inputs = []
+
+    def fake_kde(points, grid_size, kappa):
+        kde_inputs.append(np.array(points, copy=True))
+        density = np.full((2, 4), 0.5, dtype=np.float64)
+        return (
+            density,
+            np.linspace(-90.0, 90.0, 2),
+            np.linspace(-180.0, 180.0, 4),
+        )
+
+    def fake_individual_density(density, lat, lon, title, out_path):
+        out_path.write_bytes(b"individual-density")
+
+    monkeypatch.setattr(
+        earthquake_smoke_viz,
+        "spherical_kde_density_on_grid",
+        fake_kde,
+    )
+    monkeypatch.setattr(
+        earthquake_smoke_viz,
+        "plot_density_map",
+        fake_individual_density,
+    )
+    monkeypatch.setattr(
+        earthquake_smoke_viz,
+        "add_earth_background",
+        lambda ax: None,
+    )
+
+    result = earthquake_smoke_viz.generate_earthquake_density_plots(
+        observed_train_points=train,
+        observed_validation_points=validation,
+        generated_by_teacher=generated,
+        output_dir=tmp_path,
+        grid_size=4,
+        kappa=2.0,
+    )
+
+    comparison_path = tmp_path / "earthquake_density_comparison.png"
+    assert result["n_columns"] == 4
+    assert result["panel_order"] == (
+        "observed",
+        "heat",
+        "varadhan",
+        "malliavin",
+    )
+    assert result["observed_count"] == train.shape[0] + validation.shape[0]
+    np.testing.assert_array_equal(kde_inputs[0], np.concatenate((train, validation)))
+    assert comparison_path.exists()
+    assert comparison_path.stat().st_size > 0
 
 
 def test_euclidean_additive_noise_recovers_exact_path_weight():
