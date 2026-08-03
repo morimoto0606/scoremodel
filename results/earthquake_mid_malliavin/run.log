@@ -1,0 +1,7 @@
+[2026-08-02 21:56:35] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-02 21:56:35] split indices ready: train_indices.pt, validation_indices.pt
+  epoch=  500  loss=2.532191e-01  best=2.450716e-01
+  epoch= 1000  loss=1.672526e-01  best=1.665792e-01
+[2026-08-02 23:06:36] teacher=malliavin training_path=marginal_skorokhod
+[2026-08-02 23:06:36] final_train_loss=1.665792e-01 validation_loss=6.477759e+00
+[2026-08-02 23:06:36] mmd=2.002863e-02 geodesic_mean=1.588664e-01 norm_error=1.425726e-17

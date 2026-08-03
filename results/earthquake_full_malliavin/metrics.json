@@ -1,0 +1,21 @@
+{
+  "teacher": "malliavin",
+  "training_path": "marginal_skorokhod",
+  "initial_train_loss": 1.0003684778105026,
+  "final_train_loss": 0.42979806287974603,
+  "best_train_loss": 0.42979806287974603,
+  "validation_loss": 4.416071403767401,
+  "teacher_generation_seconds": 9233.046785451472,
+  "training_seconds": 145.3962026834488,
+  "reverse_sampling_seconds": 153.26779731363058,
+  "s2_rbf_mmd": 0.030625622994265522,
+  "nearest_neighbor_geodesic_mean": 0.13145359992102915,
+  "nearest_neighbor_geodesic_median": 0.0877114348410921,
+  "nearest_neighbor_geodesic_max": 0.782436895288586,
+  "generated_sample_norm_error": 1.417594340524797e-17,
+  "nan_rate": 0.0,
+  "generated_all_finite": true,
+  "generated_sample_count": 4096,
+  "device": "cuda",
+  "dtype": "float64"
+}

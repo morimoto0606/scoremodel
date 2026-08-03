@@ -1,0 +1,21 @@
+{
+  "teacher": "varadhan",
+  "training_path": "direct_score",
+  "initial_train_loss": 1.0000124616640005,
+  "final_train_loss": 0.4808687554380985,
+  "best_train_loss": 0.4808687554380985,
+  "validation_loss": 4.180758235281145,
+  "teacher_generation_seconds": 63.02595169469714,
+  "training_seconds": 146.1817556284368,
+  "reverse_sampling_seconds": 213.30149311944842,
+  "s2_rbf_mmd": 0.02589478965924208,
+  "nearest_neighbor_geodesic_mean": 0.11669070569738091,
+  "nearest_neighbor_geodesic_median": 0.08057434374184061,
+  "nearest_neighbor_geodesic_max": 0.7104482393877425,
+  "generated_sample_norm_error": 1.531435568635775e-17,
+  "nan_rate": 0.0,
+  "generated_all_finite": true,
+  "generated_sample_count": 4096,
+  "device": "cuda",
+  "dtype": "float64"
+}
