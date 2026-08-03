@@ -21,7 +21,12 @@ from scoremodel_ext.manifold.experiment_s2_malliavin_teacher import (
     train_s2_marginal_score,
     train_s2_score_model,
 )
+from scoremodel_ext.malliavin.models import (
+    MirafzaliSkorokhodNet,
+    NormalizedSkorokhodModel,
+)
 from scoremodel_ext.manifold.s2_malliavin import (
+    S2SkorokhodScoreModel,
     s2_discrete_malliavin_teacher,
     s2_grw_endpoint,
     s2_heat_kernel_score,
@@ -29,6 +34,8 @@ from scoremodel_ext.manifold.s2_malliavin import (
     s2_varadhan_score,
 )
 
+
+MAX_REVERSE_NOISE_STEPS = 1000
 
 CURATED_LOWT_TIMES: Tuple[float, ...] = (
     0.005,
@@ -47,7 +54,7 @@ CURATED_LOWT_TIMES: Tuple[float, ...] = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--teacher", choices=("heat", "varadhan", "malliavin"), required=True)
+    parser.add_argument("--teacher", choices=("heat", "varadhan", "malliavin"), default=None)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--data-path",
@@ -83,11 +90,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split-indices-path", type=Path, default=None)
     parser.add_argument("--terminal-samples-path", type=Path, default=None)
     parser.add_argument("--reverse-noise-path", type=Path, default=None)
+    parser.add_argument("--skip-teacher-generation", action="store_true")
+    parser.add_argument("--skip-training", action="store_true")
+    parser.add_argument("--model-path", type=Path, default=None)
     parser.add_argument("--covariance-regularization", type=float, default=1e-6)
     parser.add_argument("--heat-terms", type=int, default=80)
     parser.add_argument("--viz-output-dir", type=Path, default=None)
     parser.add_argument("--skip-viz", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.skip_training and args.model_path is None:
+        parser.error("--skip-training requires --model-path")
+    if args.skip_teacher_generation and not args.skip_training:
+        parser.error("--skip-teacher-generation requires --skip-training")
+    if not args.skip_training and args.teacher is None:
+        parser.error("--teacher is required unless --skip-training is used")
+    return args
 
 
 def to_dtype(name: str) -> torch.dtype:
@@ -393,6 +410,165 @@ def maybe_load_or_create_reverse_noise(
     return noise
 
 
+def load_run_config_for_model(model_path: Path) -> tuple[Path, Dict[str, object]]:
+    """Load the configuration adjacent to a saved model checkpoint."""
+
+    resolved_model_path = model_path.expanduser().resolve()
+    if not resolved_model_path.is_file():
+        raise FileNotFoundError(f"missing saved model: {resolved_model_path}")
+    config_path = resolved_model_path.parent / "run_config.json"
+    if not config_path.is_file():
+        raise FileNotFoundError(
+            f"missing run_config.json next to saved model: {config_path}"
+        )
+    with config_path.open("r", encoding="utf-8") as handle:
+        config = json.load(handle)
+    return resolved_model_path, config
+
+
+def build_model_from_run_config(
+    model_path: Path,
+    run_config: Dict[str, object],
+    *,
+    device: str,
+):
+    """Reconstruct the exact saved network structure and load its weights."""
+
+    required = ("teacher", "hidden", "n_blocks", "num_frequencies", "dtype")
+    missing = [key for key in required if key not in run_config]
+    if missing:
+        raise ValueError(f"run_config.json is missing model fields: {missing}")
+
+    dtype = to_dtype(str(run_config["dtype"]))
+    network = MirafzaliSkorokhodNet(
+        x_dim=3,
+        out_dim=3,
+        hidden=int(run_config["hidden"]),
+        n_blocks=int(run_config["n_blocks"]),
+        num_frequencies=int(run_config["num_frequencies"]),
+    ).to(device=device, dtype=dtype)
+    zeros_vector = torch.zeros(1, 3, dtype=dtype, device=device)
+    ones_vector = torch.ones(1, 3, dtype=dtype, device=device)
+    zeros_time = torch.zeros(1, 1, dtype=dtype, device=device)
+    ones_time = torch.ones(1, 1, dtype=dtype, device=device)
+    normalized_model = NormalizedSkorokhodModel(
+        network,
+        zeros_vector,
+        ones_vector,
+        zeros_time,
+        ones_time,
+        zeros_vector,
+        ones_vector,
+    ).to(device=device, dtype=dtype)
+    if run_config["teacher"] == "malliavin":
+        model = S2SkorokhodScoreModel(normalized_model).to(device=device, dtype=dtype)
+    else:
+        model = normalized_model
+
+    checkpoint = torch.load(model_path, map_location="cpu")
+    if not isinstance(checkpoint, dict) or "state_dict" not in checkpoint:
+        raise ValueError(f"saved model has no state_dict: {model_path}")
+    model.load_state_dict(checkpoint["state_dict"], strict=True)
+    model.eval()
+    return model
+
+
+def maybe_load_or_create_shared_reverse_noise(
+    *,
+    path: Path,
+    output_path: Path,
+    reverse_steps: int,
+    n_generated_samples: int,
+    dtype: torch.dtype,
+    device: str,
+    seed: int,
+) -> torch.Tensor:
+    """Persist fine noise and approximately couple coarse reverse-step runs."""
+
+    if not 1 <= reverse_steps <= MAX_REVERSE_NOISE_STEPS:
+        raise ValueError(
+            f"reverse_steps must be between 1 and {MAX_REVERSE_NOISE_STEPS}"
+        )
+    if path.exists():
+        payload = torch.load(path, map_location="cpu")
+        pool = payload["reverse_noise"] if isinstance(payload, dict) else payload
+        expected_shape = (MAX_REVERSE_NOISE_STEPS, n_generated_samples, 3)
+        if tuple(pool.shape) != expected_shape:
+            raise ValueError(
+                f"shared reverse noise must have shape {expected_shape}, "
+                f"got {tuple(pool.shape)} from {path}"
+            )
+        pool = pool.to(device=device, dtype=dtype)
+    else:
+        generator = torch.Generator(device=device)
+        generator.manual_seed(seed)
+        pool = torch.randn(
+            MAX_REVERSE_NOISE_STEPS,
+            n_generated_samples,
+            3,
+            generator=generator,
+            dtype=dtype,
+            device=device,
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(pool.detach().cpu(), path)
+
+    result = aggregate_reverse_noise_pool(pool, reverse_steps=reverse_steps)
+    if output_path.resolve() != path.resolve():
+        torch.save(result.detach().cpu(), output_path)
+    return result
+
+
+def aggregate_reverse_noise_pool(
+    pool: torch.Tensor,
+    *,
+    reverse_steps: int,
+) -> torch.Tensor:
+    """Convert fine standard normals to coarse ones via path interpolation.
+
+    The cumulative sum defines a Brownian path on the common fine grid.  The
+    path is linearly interpolated at coarse-grid times, differenced, and divided
+    by the coarse ``sqrt(dt)``.  This approximately couples non-divisor step
+    counts through a common 1000-step fine noise pool.  When ``reverse_steps``
+    divides the pool length, interpolation lands on fine-grid boundaries and
+    the result is the exact normalized sum of each fine-increment block.
+    """
+
+    if pool.ndim != 3 or pool.shape[2] != 3:
+        raise ValueError("reverse noise pool must have shape [steps, batch, 3]")
+    fine_steps = int(pool.shape[0])
+    if not 1 <= reverse_steps <= fine_steps:
+        raise ValueError(f"reverse_steps must be between 1 and {fine_steps}")
+
+    cumulative = torch.cat(
+        (
+            torch.zeros(
+                1,
+                pool.shape[1],
+                pool.shape[2],
+                dtype=pool.dtype,
+                device=pool.device,
+            ),
+            torch.cumsum(pool, dim=0),
+        ),
+        dim=0,
+    )
+    coarse_positions = torch.arange(
+        reverse_steps + 1,
+        dtype=torch.float64,
+        device=pool.device,
+    ) * (fine_steps / reverse_steps)
+    lower = torch.floor(coarse_positions).to(torch.long)
+    upper = torch.ceil(coarse_positions).to(torch.long).clamp_max(fine_steps)
+    fraction = (coarse_positions - lower).to(dtype=pool.dtype)
+    interpolated = (
+        cumulative[lower] * (1.0 - fraction[:, None, None])
+        + cumulative[upper] * fraction[:, None, None]
+    )
+    path_increments = interpolated[1:] - interpolated[:-1]
+    return path_increments * (reverse_steps / fine_steps) ** 0.5
+
+
 def build_teacher_dataset(
     *,
     initial_points: torch.Tensor,
@@ -576,6 +752,231 @@ def diagnostic_target_key_for_teacher(teacher: str) -> str:
     return "skorokhod" if teacher == "malliavin" else "score_target"
 
 
+def _load_saved_evaluation_points(
+    model_dir: Path,
+    run_config: Dict[str, object],
+    *,
+    dtype: torch.dtype,
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Load observed train/validation points without rebuilding teacher data."""
+
+    target_path = model_dir / "target_samples.pt"
+    if not target_path.is_file():
+        raise FileNotFoundError(
+            f"saved evaluation target is required in reuse mode: {target_path}"
+        )
+    validation_points = torch.load(target_path, map_location="cpu").to(
+        device=device,
+        dtype=dtype,
+    )
+
+    data_path = Path(str(run_config["data_path"]))
+    if not data_path.is_absolute() and not data_path.is_file():
+        data_path = Path(__file__).resolve().parents[1] / data_path
+    train_indices_path = model_dir / "train_indices.pt"
+    if data_path.is_file() and train_indices_path.is_file():
+        all_points = load_earthquake_points(data_path, dtype=dtype, device=device)
+        train_indices = torch.load(train_indices_path, map_location="cpu").long()
+        return normalize(all_points[train_indices.to(device)]), normalize(validation_points)
+
+    # Older run directories may only retain the initial points inside the
+    # serialized training artifact.  Loading it is a compatibility fallback;
+    # no teacher targets are generated or evaluated in this mode.
+    dataset_path = model_dir / "teacher_dataset.pt"
+    if dataset_path.is_file():
+        payload = torch.load(dataset_path, map_location="cpu")
+        if isinstance(payload, dict) and "initial_point" in payload:
+            train_points = payload["initial_point"].to(device=device, dtype=dtype)
+            return normalize(train_points), normalize(validation_points)
+
+    warnings.warn(
+        "saved training points are unavailable; the density target uses the "
+        "saved validation points only",
+        RuntimeWarning,
+        stacklevel=1,
+    )
+    return validation_points[:0], normalize(validation_points)
+
+
+def run_saved_model_evaluation(
+    args: argparse.Namespace,
+    *,
+    output_dir: Path,
+    log,
+) -> None:
+    """Run only reverse sampling and sample-based evaluation."""
+
+    if args.model_path is None:
+        raise ValueError("--skip-training requires --model-path")
+    model_path, source_config = load_run_config_for_model(args.model_path)
+    source_model_dir = model_path.parent
+
+    required_config = (
+        "teacher",
+        "dtype",
+        "minimum_time",
+        "maximum_time",
+        "n_generated_samples",
+        "seed",
+        "reverse_seed",
+    )
+    missing = [key for key in required_config if key not in source_config]
+    if missing:
+        raise ValueError(f"run_config.json is missing evaluation fields: {missing}")
+
+    teacher = str(source_config["teacher"])
+    dtype_name = str(source_config["dtype"])
+    dtype = to_dtype(dtype_name)
+    device = resolve_device(args.device)
+    n_generated_samples = int(source_config["n_generated_samples"])
+    reverse_steps = int(args.reverse_steps)
+
+    log(f"loading saved {teacher} model from {model_path}")
+    model = build_model_from_run_config(model_path, source_config, device=device)
+    observed_train, observed_validation = _load_saved_evaluation_points(
+        source_model_dir,
+        source_config,
+        dtype=dtype,
+        device=device,
+    )
+
+    terminal_path = (
+        args.terminal_samples_path.expanduser().resolve()
+        if args.terminal_samples_path is not None
+        else source_model_dir / "terminal_samples.pt"
+    )
+    terminal_samples = maybe_load_or_create_terminal_samples(
+        path=terminal_path,
+        output_path=output_dir / "terminal_samples.pt",
+        n_generated_samples=n_generated_samples,
+        dtype=dtype,
+        device=device,
+        seed=int(source_config["seed"]) + 101,
+    )
+    expected_terminal_shape = (n_generated_samples, 3)
+    if tuple(terminal_samples.shape) != expected_terminal_shape:
+        raise ValueError(
+            f"terminal samples must have shape {expected_terminal_shape}, "
+            f"got {tuple(terminal_samples.shape)}"
+        )
+
+    shared_noise_path = (
+        args.reverse_noise_path.expanduser().resolve()
+        if args.reverse_noise_path is not None
+        else source_model_dir / "reverse_noise_1000.pt"
+    )
+    reverse_noise = maybe_load_or_create_shared_reverse_noise(
+        path=shared_noise_path,
+        output_path=output_dir / "reverse_noise.pt",
+        reverse_steps=reverse_steps,
+        n_generated_samples=n_generated_samples,
+        dtype=dtype,
+        device=device,
+        seed=int(source_config["reverse_seed"]),
+    )
+
+    reverse_started = time.perf_counter()
+    generated = s2_reverse_grw(
+        terminal_samples,
+        build_score_fn(model),
+        terminal_time=float(source_config["maximum_time"]),
+        n_steps=reverse_steps,
+        standard_noise=reverse_noise,
+        minimum_forward_time=float(source_config["minimum_time"]),
+    )
+    reverse_sampling_seconds = time.perf_counter() - reverse_started
+    generated_cpu = generated.detach().cpu()
+    target_cpu = observed_validation.detach().cpu()
+    torch.save(generated_cpu, output_dir / "generated_samples.pt")
+    torch.save(target_cpu, output_dir / "target_samples.pt")
+
+    evaluation_seed = int(source_config["seed"])
+    mmd_value = s2_rbf_mmd(generated_cpu, target_cpu, seed=evaluation_seed)
+    generated_to_target = nearest_neighbor_geodesic_summary(
+        generated_cpu,
+        target_cpu,
+        seed=evaluation_seed,
+    )
+    target_to_generated = nearest_neighbor_geodesic_summary(
+        target_cpu,
+        generated_cpu,
+        seed=evaluation_seed,
+    )
+    sample_finite_rate = finite_rate(generated_cpu)
+    metrics = {
+        "teacher": teacher,
+        "evaluation_only": True,
+        "reverse_steps": reverse_steps,
+        "reverse_sampling_seconds": reverse_sampling_seconds,
+        "s2_rbf_mmd": mmd_value,
+        "generated_to_target_nearest_neighbor_geodesic": generated_to_target,
+        "target_to_generated_nearest_neighbor_geodesic": target_to_generated,
+        "nearest_neighbor_geodesic_mean": generated_to_target["mean"],
+        "nearest_neighbor_geodesic_median": generated_to_target["median"],
+        "nearest_neighbor_geodesic_max": generated_to_target["max"],
+        "generated_to_target_nearest_neighbor_geodesic_mean": generated_to_target["mean"],
+        "generated_to_target_nearest_neighbor_geodesic_median": generated_to_target["median"],
+        "generated_to_target_nearest_neighbor_geodesic_max": generated_to_target["max"],
+        "target_to_generated_nearest_neighbor_geodesic_mean": target_to_generated["mean"],
+        "target_to_generated_nearest_neighbor_geodesic_median": target_to_generated["median"],
+        "target_to_generated_nearest_neighbor_geodesic_max": target_to_generated["max"],
+        "generated_sample_norm_error": generated_norm_error(generated_cpu),
+        "nan_rate": 1.0 - sample_finite_rate,
+        "generated_all_finite": bool(sample_finite_rate == 1.0),
+        "generated_sample_count": int(generated_cpu.shape[0]),
+        "device": device,
+        "dtype": dtype_name,
+    }
+    with (output_dir / "metrics.json").open("w", encoding="utf-8") as handle:
+        json.dump(metrics, handle, indent=2)
+
+    evaluation_config = dict(source_config)
+    evaluation_config.update(
+        {
+            "output_dir": str(output_dir),
+            "model_path": str(model_path),
+            "source_run_config": str(source_model_dir / "run_config.json"),
+            "skip_teacher_generation": True,
+            "skip_training": True,
+            "reverse_steps": reverse_steps,
+            "terminal_samples_path": str(terminal_path),
+            "reverse_noise_path": str(shared_noise_path),
+            "reverse_noise_pool_steps": MAX_REVERSE_NOISE_STEPS,
+            "reverse_noise_coupling": (
+                "linear_interpolation_of_cumulative_fine_brownian_path"
+            ),
+            "reverse_noise_coupling_exact": (
+                MAX_REVERSE_NOISE_STEPS % reverse_steps == 0
+            ),
+            "resolved_device": device,
+        }
+    )
+    with (output_dir / "run_config.json").open("w", encoding="utf-8") as handle:
+        json.dump(evaluation_config, handle, indent=2, default=str)
+
+    from scoremodel_ext.manifold.earthquake_smoke_viz import (
+        generate_earthquake_density_plots,
+    )
+
+    viz_dir = (
+        args.viz_output_dir.expanduser().resolve()
+        if args.viz_output_dir is not None
+        else output_dir
+    )
+    generate_earthquake_density_plots(
+        observed_train_points=observed_train.detach().cpu(),
+        observed_validation_points=target_cpu,
+        generated_by_teacher={teacher: generated_cpu},
+        output_dir=viz_dir,
+    )
+    log(
+        f"evaluation-only reverse_steps={reverse_steps} mmd={mmd_value:.6e} "
+        f"generated_to_target_nn={generated_to_target['mean']:.6e} "
+        f"target_to_generated_nn={target_to_generated['mean']:.6e}"
+    )
+
+
 def main() -> None:
     args = parse_args()
     output_dir = args.output_dir.resolve()
@@ -589,6 +990,14 @@ def main() -> None:
         print(line)
         with run_log_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
+
+    if args.skip_teacher_generation and not args.skip_training:
+        raise ValueError("--skip-teacher-generation requires --skip-training")
+    if args.skip_training:
+        run_saved_model_evaluation(args, output_dir=output_dir, log=log)
+        return
+    if args.teacher is None:
+        raise ValueError("--teacher is required unless --skip-training is used")
 
     dtype = to_dtype(args.dtype)
     device = resolve_device(args.device)
