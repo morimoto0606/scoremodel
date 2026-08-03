@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 import numpy as np
 import torch
 
@@ -95,11 +96,27 @@ def spherical_kde_density_on_grid(points: np.ndarray, grid_size: int, kappa: flo
     return density, lat, lon
 
 
+def add_earth_background(ax) -> None:
+    """Draw the shared Earth background used by scatter and density plots."""
+
+    ax.set_global()
+    ax.set_facecolor("white")
+    ax.add_feature(cfeature.OCEAN, zorder=0, facecolor="white")
+    ax.add_feature(cfeature.LAND, zorder=1, facecolor="#e0e0e0")
+
+
+def density_overlay_cmap(*, max_alpha: float = 0.82, n_colors: int = 256) -> ListedColormap:
+    """Return a density colormap that keeps the Earth visible underneath."""
+
+    colors = plt.get_cmap("cubehelix")(np.linspace(0.0, 1.0, n_colors))
+    colors[:, 3] = max_alpha * np.linspace(0.0, 1.0, n_colors) ** 0.8
+    return ListedColormap(colors, name="earthquake_density_overlay")
+
+
 def plot_density_map(density: np.ndarray, lat: np.ndarray, lon: np.ndarray, title: str, out_path: Path) -> None:
     fig = plt.figure(figsize=(5, 5), dpi=300)
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.Orthographic(70, 30), frameon=True)
-    ax.set_global()
-    ax.add_feature(cfeature.LAND, zorder=0, facecolor="#e0e0e0")
+    add_earth_background(ax)
 
     levels = np.linspace(0.0, 1.0, 220)
     contour = ax.contourf(
@@ -109,12 +126,10 @@ def plot_density_map(density: np.ndarray, lat: np.ndarray, lon: np.ndarray, titl
         levels=levels,
         transform=ccrs.PlateCarree(),
         antialiased=True,
-        cmap="cubehelix",
+        cmap=density_overlay_cmap(),
         extend="both",
+        zorder=2,
     )
-    alpha_gradient = np.linspace(0.0, 1.0, len(ax.collections))
-    for col, alpha in zip(ax.collections, alpha_gradient):
-        col.set_alpha(alpha)
 
     ax.set_title(title)
     fig.colorbar(contour, ax=ax, shrink=0.8)
@@ -126,8 +141,7 @@ def plot_scatter_map(points: np.ndarray, title: str, out_path: Path) -> None:
     lat, lon = cartesian_to_latlon(points)
     fig = plt.figure(figsize=(5, 5), dpi=300)
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.Orthographic(70, 30), frameon=True)
-    ax.set_global()
-    ax.add_feature(cfeature.LAND, zorder=0, facecolor="#e0e0e0")
+    add_earth_background(ax)
 
     xy = ax.projection.transform_points(ccrs.Geodetic(), lon, lat)
     ax.scatter(xy[:, 0], xy[:, 1], s=0.4, alpha=0.3, c="#1f77b4")
@@ -256,16 +270,16 @@ def main() -> None:
         (axes[0], target_density, "Target KDE"),
         (axes[1], generated_density, "Generated KDE (S2 Malliavin)"),
     ]:
-        ax.set_global()
-        ax.add_feature(cfeature.LAND, zorder=0, facecolor="#e0e0e0")
+        add_earth_background(ax)
         ax.contourf(
             lon,
             lat,
             density,
             levels=np.linspace(0.0, 1.0, 220),
             transform=ccrs.PlateCarree(),
-            cmap="cubehelix",
+            cmap=density_overlay_cmap(),
             extend="both",
+            zorder=2,
         )
         ax.set_title(title)
     plt.tight_layout()

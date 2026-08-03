@@ -9,10 +9,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 
 from scripts.reproduce_earthquake_s2_malliavin import (
+    add_earth_background,
     cartesian_to_latlon,
+    density_overlay_cmap,
     plot_density_map,
     plot_scatter_map,
     spherical_kde_density_on_grid,
@@ -86,8 +87,7 @@ def generate_earthquake_smoke_plots(
     teachers = [name for name in ("heat", "varadhan", "malliavin") if name in generated_np]
     for index, teacher in enumerate(teachers, start=1):
         ax = fig.add_subplot(1, len(teachers), index, projection=ccrs.Orthographic(view_lon, view_lat), frameon=True)
-        ax.set_global()
-        ax.add_feature(cfeature.LAND, zorder=0, facecolor="#e0e0e0")
+        add_earth_background(ax)
         lat_v, lon_v = cartesian_to_latlon(_stable_subsample(generated_np[teacher], max_scatter_points))
         xy = ax.projection.transform_points(ccrs.Geodetic(), lon_v, lat_v)
         ax.scatter(xy[:, 0], xy[:, 1], s=0.3, alpha=0.35, c="#1f77b4")
@@ -100,17 +100,18 @@ def generate_earthquake_smoke_plots(
     # Density comparison with identical observed/generated normalization.
     fig = plt.figure(figsize=(5 * (len(teachers) + 1), 5), dpi=300)
     ax_obs = fig.add_subplot(1, len(teachers) + 1, 1, projection=ccrs.Orthographic(view_lon, view_lat), frameon=True)
-    ax_obs.set_global()
-    ax_obs.add_feature(cfeature.LAND, zorder=0, facecolor="#e0e0e0")
+    add_earth_background(ax_obs)
     levels = np.linspace(0.0, 1.0, 220)
+    density_cmap = density_overlay_cmap()
     ax_obs.contourf(
         lon,
         lat,
         density_observed,
         levels=levels,
         transform=ccrs.PlateCarree(),
-        cmap="cubehelix",
+        cmap=density_cmap,
         extend="both",
+        zorder=2,
     )
     ax_obs.set_title("Observed Density")
     for offset, teacher in enumerate(teachers, start=1):
@@ -121,16 +122,16 @@ def generate_earthquake_smoke_plots(
             projection=ccrs.Orthographic(view_lon, view_lat),
             frameon=True,
         )
-        ax.set_global()
-        ax.add_feature(cfeature.LAND, zorder=0, facecolor="#e0e0e0")
+        add_earth_background(ax)
         ax.contourf(
             lon,
             lat,
             per_teacher_density[teacher],
             levels=levels,
             transform=ccrs.PlateCarree(),
-            cmap="cubehelix",
+            cmap=density_cmap,
             extend="both",
+            zorder=2,
         )
         ax.set_title(f"Generated Density ({teacher})")
     fig.tight_layout()
