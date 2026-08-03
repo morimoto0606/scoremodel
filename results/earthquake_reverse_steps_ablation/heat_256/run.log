@@ -1,0 +1,2 @@
+[2026-08-03 23:29:25] loading saved heat model from /home/export/home/ymorimoto/github/scoremodel/results/earthquake_lowt_heat/model.pt
+[2026-08-03 23:34:07] evaluation-only reverse_steps=256 mmd=4.458075e-02 generated_to_target_nn=2.313543e-01 target_to_generated_nn=3.628989e-02

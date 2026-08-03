@@ -1,0 +1,2 @@
+[2026-08-04 00:02:57] loading saved varadhan model from /home/export/home/ymorimoto/github/scoremodel/results/earthquake_lowt_varadhan/model.pt
+[2026-08-04 00:10:20] evaluation-only reverse_steps=512 mmd=4.612790e-02 generated_to_target_nn=2.311492e-01 target_to_generated_nn=3.807569e-02

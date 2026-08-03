@@ -1,0 +1,2 @@
+[2026-08-04 00:30:53] loading saved malliavin model from /home/export/home/ymorimoto/github/scoremodel/results/earthquake_lowt_malliavin/model.pt
+[2026-08-04 00:38:03] evaluation-only reverse_steps=512 mmd=1.589356e-01 generated_to_target_nn=2.786817e-01 target_to_generated_nn=4.462561e-02
