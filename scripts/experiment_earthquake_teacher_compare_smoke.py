@@ -570,7 +570,9 @@ def main() -> None:
                 }
 
         generate_earthquake_smoke_plots(
-            observed_points=validation_initial.detach().cpu(),
+            observed_points=torch.cat((train_initial, validation_initial), dim=0).detach().cpu(),
+            observed_train_points=train_initial.detach().cpu(),
+            observed_test_points=validation_initial.detach().cpu(),
             generated_by_teacher=teacher_generated,
             training_history_by_teacher=teacher_history,
             output_dir=viz_dir,

@@ -14,6 +14,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import numpy as np
+import seaborn as sns
 import torch
 
 import cartopy.crs as ccrs
@@ -113,6 +114,30 @@ def density_overlay_cmap(*, max_alpha: float = 0.82, n_colors: int = 256) -> Lis
     return ListedColormap(colors, name="earthquake_density_overlay")
 
 
+def scatter_earthquake_points(ax, points: np.ndarray, *, role: str) -> None:
+    """Scatter Earthquake points with the styles used by De Bortoli et al."""
+
+    styles = {
+        "generated": {"size": 1.0, "color_index": 1, "alpha": 1.0},
+        "train": {"size": 0.2, "color_index": 5, "alpha": 0.2},
+        "test": {"size": 0.2, "color_index": 0, "alpha": 0.2},
+    }
+    if role not in styles:
+        raise ValueError(f"unknown Earthquake scatter role: {role!r}")
+
+    style = styles[role]
+    colors = sns.color_palette("hls", 8)
+    lat, lon = cartesian_to_latlon(points)
+    projected = ax.projection.transform_points(ccrs.Geodetic(), lon, lat)
+    ax.scatter(
+        projected[:, 0],
+        projected[:, 1],
+        s=style["size"],
+        c=[colors[style["color_index"]]],
+        alpha=style["alpha"],
+    )
+
+
 def plot_density_map(density: np.ndarray, lat: np.ndarray, lon: np.ndarray, title: str, out_path: Path) -> None:
     fig = plt.figure(figsize=(5, 5), dpi=300)
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.Orthographic(70, 30), frameon=True)
@@ -137,14 +162,18 @@ def plot_density_map(density: np.ndarray, lat: np.ndarray, lon: np.ndarray, titl
     plt.close(fig)
 
 
-def plot_scatter_map(points: np.ndarray, title: str, out_path: Path) -> None:
-    lat, lon = cartesian_to_latlon(points)
+def plot_scatter_map(
+    points: np.ndarray,
+    title: str,
+    out_path: Path,
+    *,
+    role: str = "generated",
+) -> None:
     fig = plt.figure(figsize=(5, 5), dpi=300)
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.Orthographic(70, 30), frameon=True)
     add_earth_background(ax)
 
-    xy = ax.projection.transform_points(ccrs.Geodetic(), lon, lat)
-    ax.scatter(xy[:, 0], xy[:, 1], s=0.4, alpha=0.3, c="#1f77b4")
+    scatter_earthquake_points(ax, points, role=role)
     ax.set_title(title)
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -255,8 +284,18 @@ def main() -> None:
 
     plot_density_map(target_density, lat, lon, "Target Earthquake KDE", args.outdir / "pdf_target_earthquake.png")
     plot_density_map(generated_density, lat, lon, "S2 Malliavin Generated KDE", args.outdir / "pdf_generated_s2_malliavin.png")
-    plot_scatter_map(all_points, "Target Earthquake Points", args.outdir / "scatter_target_earthquake.png")
-    plot_scatter_map(generated, "Generated S2 Malliavin Samples", args.outdir / "scatter_generated_s2_malliavin.png")
+    plot_scatter_map(
+        all_points,
+        "Target Earthquake Points",
+        args.outdir / "scatter_target_earthquake.png",
+        role="train",
+    )
+    plot_scatter_map(
+        generated,
+        "Generated S2 Malliavin Samples",
+        args.outdir / "scatter_generated_s2_malliavin.png",
+        role="generated",
+    )
 
     # Side-by-side density comparison
     fig, axes = plt.subplots(

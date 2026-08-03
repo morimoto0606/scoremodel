@@ -12,10 +12,9 @@ import cartopy.crs as ccrs
 
 from scripts.reproduce_earthquake_s2_malliavin import (
     add_earth_background,
-    cartesian_to_latlon,
     density_overlay_cmap,
     plot_density_map,
-    plot_scatter_map,
+    scatter_earthquake_points,
     spherical_kde_density_on_grid,
 )
 
@@ -38,24 +37,61 @@ def generate_earthquake_smoke_plots(
     generated_by_teacher: Mapping[str, torch.Tensor | np.ndarray],
     training_history_by_teacher: Mapping[str, Dict[str, list[float]]],
     output_dir: Path,
+    observed_train_points: torch.Tensor | np.ndarray | None = None,
+    observed_test_points: torch.Tensor | np.ndarray | None = None,
     grid_size: int = 400,
     kappa: float = 80.0,
     view_lon: float = 70.0,
     view_lat: float = 30.0,
-    max_scatter_points: int = 5000,
+    max_scatter_points: int | None = None,
 ) -> None:
     """Create required fixed-condition globe/density/loss comparison figures."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     observed = _to_numpy(observed_points)
+    observed_train = (
+        observed if observed_train_points is None else _to_numpy(observed_train_points)
+    )
+    observed_test = (
+        np.empty((0, 3), dtype=observed.dtype)
+        if observed_test_points is None
+        else _to_numpy(observed_test_points)
+    )
     generated_np = {name: _to_numpy(points) for name, points in generated_by_teacher.items()}
 
-    observed_scatter = _stable_subsample(observed, max_scatter_points)
-    plot_scatter_map(
-        observed_scatter,
-        "Observed Earthquake Points",
+    def scatter_points(points: np.ndarray) -> np.ndarray:
+        if max_scatter_points is None:
+            return points
+        return _stable_subsample(points, max_scatter_points)
+
+    def save_scatter_figure(
+        path: Path,
+        title: str,
+        *,
+        generated: np.ndarray | None = None,
+    ) -> None:
+        fig = plt.figure(figsize=(5, 5), dpi=300)
+        ax = fig.add_subplot(
+            1,
+            1,
+            1,
+            projection=ccrs.Orthographic(view_lon, view_lat),
+            frameon=True,
+        )
+        add_earth_background(ax)
+        if generated is not None:
+            scatter_earthquake_points(ax, scatter_points(generated), role="generated")
+        scatter_earthquake_points(ax, scatter_points(observed_train), role="train")
+        if observed_test.shape[0] > 0:
+            scatter_earthquake_points(ax, scatter_points(observed_test), role="test")
+        ax.set_title(title)
+        fig.savefig(path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    save_scatter_figure(
         output_dir / "earthquake_observed_globe.png",
+        "Observed Earthquake Points",
     )
 
     density_observed, lat, lon = spherical_kde_density_on_grid(observed, grid_size, kappa)
@@ -65,11 +101,10 @@ def generate_earthquake_smoke_plots(
         if teacher not in generated_np:
             continue
         generated = generated_np[teacher]
-        generated_scatter = _stable_subsample(generated, max_scatter_points)
-        plot_scatter_map(
-            generated_scatter,
-            f"Generated Points ({teacher})",
+        save_scatter_figure(
             output_dir / f"earthquake_generated_{teacher}.png",
+            f"Generated Points ({teacher})",
+            generated=generated,
         )
 
         density, _, _ = spherical_kde_density_on_grid(generated, grid_size, kappa)
@@ -88,9 +123,14 @@ def generate_earthquake_smoke_plots(
     for index, teacher in enumerate(teachers, start=1):
         ax = fig.add_subplot(1, len(teachers), index, projection=ccrs.Orthographic(view_lon, view_lat), frameon=True)
         add_earth_background(ax)
-        lat_v, lon_v = cartesian_to_latlon(_stable_subsample(generated_np[teacher], max_scatter_points))
-        xy = ax.projection.transform_points(ccrs.Geodetic(), lon_v, lat_v)
-        ax.scatter(xy[:, 0], xy[:, 1], s=0.3, alpha=0.35, c="#1f77b4")
+        scatter_earthquake_points(
+            ax,
+            scatter_points(generated_np[teacher]),
+            role="generated",
+        )
+        scatter_earthquake_points(ax, scatter_points(observed_train), role="train")
+        if observed_test.shape[0] > 0:
+            scatter_earthquake_points(ax, scatter_points(observed_test), role="test")
         ax.set_title(f"Generated ({teacher})")
     fig.suptitle(f"Generated Sample Comparison (view lon={view_lon}, lat={view_lat})")
     fig.tight_layout()
