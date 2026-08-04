@@ -21,7 +21,7 @@ def _execute(
     noises: torch.Tensor,
     batch_size: int,
     covariance_regularization: float,
-) -> None:
+) -> dict[str, object]:
     if implementation == "scalar":
         runner.build_teacher_dataset(
             initial_points=initial_points,
@@ -31,8 +31,8 @@ def _execute(
             covariance_regularization=covariance_regularization,
             heat_terms=80,
         )
-        return
-    runner.build_malliavin_teacher_dataset_batched(
+        return {"effective_batch_size": 1, "oom_fallback": False}
+    _, _, effective_batch_sizes = runner.build_malliavin_teacher_dataset_batched(
         initial_points=initial_points,
         times=times,
         noises=noises,
@@ -40,8 +40,24 @@ def _execute(
         covariance_regularization=covariance_regularization,
     )
 
+    cursor = 0
+    fallback_sizes: list[int] = []
+    for effective_size in effective_batch_sizes:
+        expected_size = min(batch_size, initial_points.shape[0] - cursor)
+        if effective_size < expected_size:
+            fallback_sizes.append(effective_size)
+        cursor += effective_size
+    return {
+        "effective_batch_size": (
+            min(fallback_sizes)
+            if fallback_sizes
+            else min(batch_size, initial_points.shape[0])
+        ),
+        "oom_fallback": bool(fallback_sizes),
+    }
 
-def profile_one(
+
+def measure_one(
     implementation: str,
     *,
     initial_points: torch.Tensor,
@@ -50,20 +66,89 @@ def profile_one(
     batch_size: int,
     covariance_regularization: float,
     repeats: int,
-    trace_path: Path,
 ) -> dict:
+    use_cuda = initial_points.device.type == "cuda"
+    wall_times: list[float] = []
+    cuda_event_times: list[float] = []
+    peak_allocated_values: list[int] = []
+    peak_reserved_values: list[int] = []
+    effective_batch_sizes: list[int] = []
+    oom_fallback = False
+
+    for _ in range(repeats):
+        if use_cuda:
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.synchronize()
+            cuda_start = torch.cuda.Event(enable_timing=True)
+            cuda_end = torch.cuda.Event(enable_timing=True)
+        else:
+            cuda_start = None
+            cuda_end = None
+
+        wall_start = time.perf_counter()
+        if cuda_start is not None:
+            cuda_start.record()
+        execution_metadata = _execute(
+            implementation,
+            initial_points=initial_points,
+            times=times,
+            noises=noises,
+            batch_size=batch_size,
+            covariance_regularization=covariance_regularization,
+        )
+        if cuda_end is not None:
+            cuda_end.record()
+        if use_cuda:
+            torch.cuda.synchronize()
+        wall_times.append(time.perf_counter() - wall_start)
+
+        if use_cuda:
+            assert cuda_start is not None and cuda_end is not None
+            cuda_event_times.append(cuda_start.elapsed_time(cuda_end) / 1_000.0)
+            peak_allocated_values.append(torch.cuda.max_memory_allocated())
+            peak_reserved_values.append(torch.cuda.max_memory_reserved())
+        effective_batch_sizes.append(int(execution_metadata["effective_batch_size"]))
+        oom_fallback = oom_fallback or bool(execution_metadata["oom_fallback"])
+
+    return {
+        "implementation": implementation,
+        "batch_size": 1 if implementation == "scalar" else batch_size,
+        "effective_batch_size": min(effective_batch_sizes),
+        "oom_fallback": oom_fallback,
+        "n_samples": int(initial_points.shape[0]),
+        "n_steps": int(noises.shape[1]),
+        "repeats": repeats,
+        "wall_time_seconds": sum(wall_times) / len(wall_times),
+        "cuda_event_seconds": (
+            sum(cuda_event_times) / len(cuda_event_times)
+            if cuda_event_times
+            else None
+        ),
+        "peak_memory_allocated": (
+            max(peak_allocated_values) if peak_allocated_values else None
+        ),
+        "peak_memory_reserved": (
+            max(peak_reserved_values) if peak_reserved_values else None
+        ),
+    }
+
+
+def export_trace(
+    implementation: str,
+    *,
+    initial_points: torch.Tensor,
+    times: torch.Tensor,
+    noises: torch.Tensor,
+    batch_size: int,
+    covariance_regularization: float,
+    trace_path: Path,
+) -> None:
     use_cuda = initial_points.device.type == "cuda"
     activities = [torch.profiler.ProfilerActivity.CPU]
     if use_cuda:
         activities.append(torch.profiler.ProfilerActivity.CUDA)
         torch.cuda.synchronize()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
-        cuda_start = torch.cuda.Event(enable_timing=True)
-        cuda_end = torch.cuda.Event(enable_timing=True)
-    else:
-        cuda_start = None
-        cuda_end = None
 
     with torch.profiler.profile(
         activities=activities,
@@ -71,54 +156,19 @@ def profile_one(
         profile_memory=True,
         with_stack=False,
     ) as profiler:
-        wall_start = time.perf_counter()
-        if cuda_start is not None:
-            cuda_start.record()
-        for _ in range(repeats):
-            _execute(
-                implementation,
-                initial_points=initial_points,
-                times=times,
-                noises=noises,
-                batch_size=batch_size,
-                covariance_regularization=covariance_regularization,
-            )
-        if cuda_end is not None:
-            cuda_end.record()
+        _execute(
+            implementation,
+            initial_points=initial_points,
+            times=times,
+            noises=noises,
+            batch_size=batch_size,
+            covariance_regularization=covariance_regularization,
+        )
+        if use_cuda:
             torch.cuda.synchronize()
-        wall_seconds = time.perf_counter() - wall_start
 
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     profiler.export_chrome_trace(str(trace_path))
-    if use_cuda:
-        cuda_event_ms = cuda_start.elapsed_time(cuda_end) / repeats
-        peak_allocated = torch.cuda.max_memory_allocated()
-        peak_reserved = torch.cuda.max_memory_reserved()
-        cuda_device_type = torch.autograd.DeviceType.CUDA
-        kernel_count = sum(
-            1
-            for event in profiler.events()
-            if event.device_type == cuda_device_type
-        )
-        kernel_count /= repeats
-    else:
-        cuda_event_ms = None
-        peak_allocated = None
-        peak_reserved = None
-        kernel_count = None
-    return {
-        "implementation": implementation,
-        "batch_size": 1 if implementation == "scalar" else batch_size,
-        "n_samples": int(initial_points.shape[0]),
-        "n_steps": int(noises.shape[1]),
-        "repeats": repeats,
-        "wall_seconds_per_repeat": wall_seconds / repeats,
-        "cuda_event_ms_per_repeat": cuda_event_ms,
-        "peak_memory_allocated_bytes": peak_allocated,
-        "peak_memory_reserved_bytes": peak_reserved,
-        "cuda_kernel_count_per_repeat": kernel_count,
-        "trace_path": str(trace_path),
-    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -140,6 +190,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--covariance-regularization", type=float, default=1e-6)
     parser.add_argument("--dtype", choices=("float32", "float64"), default="float64")
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--export-traces",
+        action="store_true",
+        help="Export Chrome traces in a separate profiler pass (disabled by default).",
+    )
     return parser.parse_args()
 
 
@@ -166,7 +221,7 @@ def main() -> None:
     noises = noises[:n_samples]
     output_dir = args.output_dir.resolve()
     results = [
-        profile_one(
+        measure_one(
             "scalar",
             initial_points=initial_points,
             times=times,
@@ -174,12 +229,11 @@ def main() -> None:
             batch_size=1,
             covariance_regularization=args.covariance_regularization,
             repeats=args.repeats,
-            trace_path=output_dir / "scalar_trace.json",
         )
     ]
     for batch_size in args.batch_sizes:
         results.append(
-            profile_one(
+            measure_one(
                 "batched",
                 initial_points=initial_points,
                 times=times,
@@ -187,13 +241,37 @@ def main() -> None:
                 batch_size=batch_size,
                 covariance_regularization=args.covariance_regularization,
                 repeats=args.repeats,
-                trace_path=output_dir / f"batch_{batch_size}_trace.json",
             )
         )
+
+    scalar_wall_time = float(results[0]["wall_time_seconds"])
+    for result in results:
+        result["speedup_vs_scalar"] = (
+            scalar_wall_time / float(result["wall_time_seconds"])
+        )
+
+    if args.export_traces:
+        for result in results:
+            implementation = str(result["implementation"])
+            batch_size = int(result["batch_size"])
+            label = implementation if implementation == "scalar" else f"batch_{batch_size}"
+            trace_path = output_dir / f"{label}_trace.json"
+            export_trace(
+                implementation,
+                initial_points=initial_points,
+                times=times,
+                noises=noises,
+                batch_size=batch_size,
+                covariance_regularization=args.covariance_regularization,
+                trace_path=trace_path,
+            )
+            result["trace_path"] = str(trace_path)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
-        "device": device,
+        "device": str(device),
         "dtype": args.dtype,
+        "export_traces": args.export_traces,
         "results": results,
     }
     with (output_dir / "teacher_batch_profile.json").open(
