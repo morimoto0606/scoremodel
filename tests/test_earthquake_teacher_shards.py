@@ -157,6 +157,62 @@ def test_torch_func_batched_teacher_matches_scalar_cuda_float64():
             )
 
 
+@pytest.mark.parametrize("batch_size", [4, 16])
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_torch_func_batched_teacher_matches_scalar_cuda_float64_32_steps(
+    batch_size,
+):
+    device = "cuda"
+    generator = torch.Generator(device=device).manual_seed(2718)
+    initial_points = torch.randn(
+        4, 3, generator=generator, dtype=DTYPE, device=device
+    )
+    initial_points = initial_points / torch.linalg.vector_norm(
+        initial_points, dim=1, keepdim=True
+    )
+    noises = torch.randn(
+        4, 32, 3, generator=generator, dtype=DTYPE, device=device
+    )
+    times = torch.tensor([0.05, 0.1, 0.2, 0.3], dtype=DTYPE, device=device)
+
+    _, details, effective_batch_sizes = (
+        runner.build_malliavin_teacher_dataset_batched(
+            initial_points=initial_points,
+            times=times,
+            noises=noises,
+            batch_size=batch_size,
+            covariance_regularization=1e-6,
+        )
+    )
+
+    assert effective_batch_sizes == [4]
+    for index in range(4):
+        scalar = s2_discrete_malliavin_teacher(
+            initial_points[index],
+            noises[index],
+            float(times[index].detach().cpu()),
+            covariance_regularization=1e-6,
+        )
+        for key in REQUIRED_DETAIL_KEYS:
+            candidate = details[key][index]
+            reference = getattr(scalar, key)
+            max_abs_error = float(
+                torch.max(torch.abs(candidate - reference)).detach().cpu()
+            )
+            assert max_abs_error <= 1e-12, (
+                batch_size,
+                index,
+                key,
+                max_abs_error,
+            )
+            torch.testing.assert_close(
+                candidate,
+                reference,
+                rtol=0.0,
+                atol=1e-12,
+            )
+
+
 def test_teacher_shard_worker_loads_saved_inputs_without_rng(monkeypatch, tmp_path):
     train_size = 2
     validation_size = 1
