@@ -17,6 +17,7 @@ import torch.nn as nn
 
 from .malliavin_teacher import (
     DiscreteMalliavinTeacher,
+    batched_discrete_malliavin_skorokhod_teacher,
     discrete_malliavin_skorokhod_teacher,
     tangent_malliavin_skorokhod_teacher,
 )
@@ -119,6 +120,28 @@ def s2_grw_endpoint(
     return x
 
 
+def s2_grw_endpoint_tensor_time(
+    initial_point: Tensor,
+    standard_noise: Tensor,
+    terminal_time: Tensor,
+) -> Tensor:
+    """Pure tensor-time GRW used inside ``torch.func`` transforms.
+
+    Shape/value validation belongs to the outer batched adapter.  Keeping this
+    single-sample function free of tensor-dependent Python branches and scalar
+    extraction makes it composable with nested ``jacrev`` and ``vmap``.
+    """
+
+    x = initial_point.reshape(3)
+    x = x / torch.linalg.vector_norm(x)
+    sqrt_dt = torch.sqrt(terminal_time / standard_noise.shape[0])
+    for step in range(standard_noise.shape[0]):
+        increment = standard_noise[step]
+        tangent_increment = sqrt_dt * s2_to_tangent(increment, x)
+        x = s2_exp(x, tangent_increment)
+    return x
+
+
 def s2_tangent_basis(endpoint: Tensor) -> Tensor:
     """Orthonormal tangent basis for the sphere at ``endpoint``."""
 
@@ -181,6 +204,38 @@ def s2_discrete_malliavin_teacher(
         field_divergence_fn=s2_projected_ambient_field_divergence,
         covariance_regularization=covariance_regularization,
         vectorize_jacobian=vectorize_jacobian,
+    )
+
+
+def s2_batched_discrete_malliavin_teacher(
+    initial_points: Tensor,
+    standard_noises: Tensor,
+    terminal_times: Tensor,
+    *,
+    covariance_regularization: float = 1e-6,
+) -> DiscreteMalliavinTeacher:
+    """Compute ordered S2 teachers with one sample-direction ``vmap``."""
+
+    if initial_points.ndim != 2 or initial_points.shape[1] != 3:
+        raise ValueError("initial_points must have shape [batch, 3]")
+    if standard_noises.ndim != 3 or standard_noises.shape[2] != 3:
+        raise ValueError("standard_noises must have shape [batch, n_steps, 3]")
+    if standard_noises.shape[1] < 1:
+        raise ValueError("at least one GRW step is required")
+    if terminal_times.shape != (initial_points.shape[0],):
+        raise ValueError("terminal_times must have shape [batch]")
+    if standard_noises.shape[0] != initial_points.shape[0]:
+        raise ValueError("standard_noises batch dimension does not match")
+    if bool((terminal_times <= 0).any().detach().cpu()):
+        raise ValueError("all terminal_times must be positive")
+    return batched_discrete_malliavin_skorokhod_teacher(
+        s2_grw_endpoint_tensor_time,
+        initial_points,
+        standard_noises,
+        terminal_times,
+        s2_projected_ambient_fields,
+        field_divergence_fn=s2_projected_ambient_field_divergence,
+        covariance_regularization=covariance_regularization,
     )
 
 

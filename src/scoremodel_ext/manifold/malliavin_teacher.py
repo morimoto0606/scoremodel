@@ -406,3 +406,182 @@ def discrete_malliavin_skorokhod_teacher(
         directional_score_weight=directional_score_weight,
         score_weight=score_weight,
     )
+
+
+def _pure_single_malliavin_skorokhod_teacher(
+    endpoint_fn: Callable[[Tensor, Tensor, Tensor], Tensor],
+    initial_point: Tensor,
+    standard_noise: Tensor,
+    terminal_time: Tensor,
+    target_fields_fn: TargetFields,
+    *,
+    field_divergence_fn: Optional[FieldDivergence],
+    covariance_regularization: float,
+    reconstruction_rtol: float,
+) -> tuple[Tensor, ...]:
+    """Pure ``torch.func`` form of the exact single-sample teacher.
+
+    This intentionally mirrors :func:`discrete_malliavin_skorokhod_teacher`.
+    It returns tensors rather than a dataclass so that ``torch.func.vmap`` can
+    add the sample dimension without registering a custom pytree.
+    """
+
+    noise_shape = standard_noise.shape
+    z_flat = standard_noise.reshape(-1)
+
+    def flat_endpoint(z: Tensor) -> Tensor:
+        return endpoint_fn(
+            initial_point,
+            z.reshape(noise_shape),
+            terminal_time,
+        ).reshape(-1)
+
+    def prepare_endpoint_state(z: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        endpoint = flat_endpoint(z)
+        jacobian = torch.func.jacrev(flat_endpoint)(z).reshape(
+            endpoint.numel(), z.numel()
+        )
+        fields = target_fields_fn(endpoint).reshape(endpoint.numel(), -1)
+        return endpoint, jacobian, fields
+
+    def covering_from_endpoint_state(jacobian: Tensor, fields: Tensor) -> Tensor:
+        covariance = _symmetrize(jacobian @ jacobian.transpose(0, 1))
+        eye = torch.eye(
+            covariance.shape[0],
+            dtype=covariance.dtype,
+            device=covariance.device,
+        )
+        coefficients = torch.linalg.solve(
+            covariance + covariance_regularization * eye,
+            fields,
+        )
+        return jacobian.transpose(0, 1) @ coefficients
+
+    def covering_from_noise(z: Tensor) -> Tensor:
+        _, jacobian, fields = prepare_endpoint_state(z)
+        return covering_from_endpoint_state(jacobian, fields)
+
+    endpoint, endpoint_jacobian, fields = prepare_endpoint_state(z_flat)
+    covariance = _symmetrize(endpoint_jacobian @ endpoint_jacobian.transpose(0, 1))
+    covariance_eigenvalues = torch.linalg.eigvalsh(covariance)
+    covering = covering_from_endpoint_state(endpoint_jacobian, fields)
+
+    covering_jacobian = torch.func.jacrev(covering_from_noise)(z_flat).reshape(
+        z_flat.numel(), fields.shape[1], z_flat.numel()
+    )
+    diagonal_indices = torch.arange(z_flat.numel(), device=z_flat.device)
+    covering_divergence = covering_jacobian[
+        diagonal_indices, :, diagonal_indices
+    ].sum(dim=0)
+    gaussian_pairing = covering.transpose(0, 1) @ z_flat
+    skorokhod = gaussian_pairing - covering_divergence
+
+    if field_divergence_fn is None:
+        field_divergence = torch.zeros_like(skorokhod)
+    else:
+        field_divergence = field_divergence_fn(endpoint).reshape(-1)
+    directional_score_weight = -skorokhod - field_divergence
+    right_inverse_residual = torch.linalg.vector_norm(
+        endpoint_jacobian @ covering - fields,
+        dim=0,
+    )
+    score_weight = torch.linalg.pinv(
+        fields.transpose(0, 1), rtol=reconstruction_rtol
+    ) @ directional_score_weight
+
+    absolute_eigenvalues = covariance_eigenvalues.abs()
+    largest = absolute_eigenvalues.max()
+    smallest = absolute_eigenvalues.min()
+    condition_number = torch.where(
+        smallest <= 0,
+        torch.full_like(largest, torch.inf),
+        largest / smallest,
+    )
+    return (
+        endpoint,
+        endpoint_jacobian,
+        covariance,
+        covariance_eigenvalues,
+        condition_number,
+        covering,
+        right_inverse_residual,
+        gaussian_pairing,
+        covering_divergence,
+        skorokhod,
+        directional_score_weight,
+        score_weight,
+    )
+
+
+def batched_discrete_malliavin_skorokhod_teacher(
+    endpoint_fn: Callable[[Tensor, Tensor, Tensor], Tensor],
+    initial_points: Tensor,
+    standard_noises: Tensor,
+    terminal_times: Tensor,
+    target_fields_fn: TargetFields,
+    *,
+    field_divergence_fn: Optional[FieldDivergence] = None,
+    covariance_regularization: float = 1e-6,
+    reconstruction_rtol: float = 1e-7,
+) -> DiscreteMalliavinTeacher:
+    """Exact sample-batched teacher built from ``vmap(jacrev(...))``.
+
+    No random variables are generated here.  The leading dimensions of
+    ``initial_points``, ``standard_noises``, and ``terminal_times`` identify
+    the same ordered samples returned in the output dataclass.
+    """
+
+    if covariance_regularization <= 0:
+        raise ValueError("covariance_regularization must be positive")
+    if initial_points.ndim != 2:
+        raise ValueError("initial_points must have shape [batch, endpoint_dim]")
+    if standard_noises.ndim < 2:
+        raise ValueError("standard_noises must have a leading batch dimension")
+    batch_size = initial_points.shape[0]
+    if standard_noises.shape[0] != batch_size:
+        raise ValueError("standard_noises batch dimension does not match")
+    if terminal_times.shape != (batch_size,):
+        raise ValueError("terminal_times must have shape [batch]")
+    if not standard_noises.is_floating_point():
+        raise TypeError("standard_noises must be floating point")
+    if (
+        initial_points.dtype != standard_noises.dtype
+        or terminal_times.dtype != standard_noises.dtype
+    ):
+        raise ValueError("batched teacher inputs must have one dtype")
+
+    def single_teacher(
+        initial_point: Tensor,
+        standard_noise: Tensor,
+        terminal_time: Tensor,
+    ) -> tuple[Tensor, ...]:
+        return _pure_single_malliavin_skorokhod_teacher(
+            endpoint_fn,
+            initial_point,
+            standard_noise,
+            terminal_time,
+            target_fields_fn,
+            field_divergence_fn=field_divergence_fn,
+            covariance_regularization=covariance_regularization,
+            reconstruction_rtol=reconstruction_rtol,
+        )
+
+    outputs = torch.func.vmap(single_teacher)(
+        initial_points,
+        standard_noises,
+        terminal_times,
+    )
+    return DiscreteMalliavinTeacher(
+        endpoint=outputs[0],
+        endpoint_jacobian=outputs[1],
+        covariance=outputs[2],
+        covariance_eigenvalues=outputs[3],
+        condition_number=outputs[4],
+        covering=outputs[5],
+        right_inverse_residual=outputs[6],
+        gaussian_pairing=outputs[7],
+        divergence_term=outputs[8],
+        skorokhod=outputs[9],
+        directional_score_weight=outputs[10],
+        score_weight=outputs[11],
+    )

@@ -1,0 +1,60 @@
+#!/bin/bash
+#PBS -N s2-malliavin-teacher
+#PBS -J 0-3
+#PBS -l select=1:ncpus=4:ngpus=1:mem=24gb
+#PBS -l walltime=12:00:00
+#PBS -j oe
+
+set -euo pipefail
+
+# Required environment variables supplied to qsub:
+#   SCOREMODEL_DIR     repository root
+#   TEACHER_INPUT_DIR directory prepared once by --prepare-teacher-inputs-only
+#   SHARD_ROOT         destination shared by the four array jobs
+SCOREMODEL_DIR=${SCOREMODEL_DIR:?set SCOREMODEL_DIR}
+TEACHER_INPUT_DIR=${TEACHER_INPUT_DIR:?set TEACHER_INPUT_DIR}
+SHARD_ROOT=${SHARD_ROOT:?set SHARD_ROOT}
+
+cd "$SCOREMODEL_DIR"
+source .venv/bin/activate
+
+STARTS=(0 1280 2560 3840)
+ENDS=(1280 2560 3840 5120)
+INDEX=${PBS_ARRAY_INDEX:?PBS array index is unavailable}
+START=${STARTS[$INDEX]}
+END=${ENDS[$INDEX]}
+OUTPUT_DIR="$SHARD_ROOT/shard_${INDEX}"
+
+PYTHONPATH=src python scripts/experiment_earthquake_teacher_compare_smoke.py \
+  --teacher malliavin \
+  --teacher-dataset-only \
+  --teacher-implementation batched \
+  --teacher-batch-size 4 \
+  --teacher-start-index "$START" \
+  --teacher-end-index "$END" \
+  --teacher-initial-points-path "$TEACHER_INPUT_DIR/teacher_initial_points.pt" \
+  --time-samples-path "$TEACHER_INPUT_DIR/time_samples.pt" \
+  --validation-time-samples-path "$TEACHER_INPUT_DIR/validation_time_samples.pt" \
+  --teacher-noises-path "$TEACHER_INPUT_DIR/teacher_noises.pt" \
+  --output-dir "$OUTPUT_DIR" \
+  --train-size 4096 \
+  --validation-size 1024 \
+  --n-steps 32 \
+  --covariance-regularization 1e-6 \
+  --dtype float64 \
+  --device cuda
+
+# One-time input preparation before qsub (run with the intended seed/config):
+# PYTHONPATH=src python scripts/experiment_earthquake_teacher_compare_smoke.py \
+#   --teacher malliavin --prepare-teacher-inputs-only \
+#   --output-dir "$TEACHER_INPUT_DIR" --train-size 4096 \
+#   --validation-size 1024 --n-steps 32 --dtype float64 --device cuda
+#
+# Submit:
+# qsub -v SCOREMODEL_DIR="$PWD",TEACHER_INPUT_DIR="$TEACHER_INPUT_DIR",SHARD_ROOT="$SHARD_ROOT" \
+#   scripts/pbs/earthquake_malliavin_teacher_4shards.pbs
+#
+# Combine after all four jobs finish:
+# PYTHONPATH=src python scripts/combine_earthquake_teacher_shards.py \
+#   --shards "$SHARD_ROOT"/shard_*/teacher_dataset_shard_*.pt \
+#   --output-dir "$SHARD_ROOT/combined"

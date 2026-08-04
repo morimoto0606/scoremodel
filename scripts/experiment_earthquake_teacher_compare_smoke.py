@@ -27,6 +27,7 @@ from scoremodel_ext.malliavin.models import (
 )
 from scoremodel_ext.manifold.s2_malliavin import (
     S2SkorokhodScoreModel,
+    s2_batched_discrete_malliavin_teacher,
     s2_discrete_malliavin_teacher,
     s2_grw_endpoint,
     s2_heat_kernel_score,
@@ -64,6 +65,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-size", type=int, default=256)
     parser.add_argument("--validation-size", type=int, default=128)
     parser.add_argument("--n-steps", type=int, default=8)
+    parser.add_argument(
+        "--teacher-implementation",
+        choices=("scalar", "batched"),
+        default="scalar",
+    )
+    parser.add_argument(
+        "--teacher-batch-size",
+        type=int,
+        choices=(1, 4, 8, 16),
+        default=4,
+    )
     parser.add_argument("--minimum-time", type=float, default=0.05)
     parser.add_argument("--maximum-time", type=float, default=0.3)
     parser.add_argument(
@@ -73,6 +85,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--time-samples-path", type=Path, default=None)
     parser.add_argument("--validation-time-samples-path", type=Path, default=None)
+    parser.add_argument("--teacher-initial-points-path", type=Path, default=None)
+    parser.add_argument("--teacher-noises-path", type=Path, default=None)
+    parser.add_argument("--teacher-start-index", type=int, default=None)
+    parser.add_argument("--teacher-end-index", type=int, default=None)
+    parser.add_argument("--teacher-dataset-only", action="store_true")
+    parser.add_argument("--prepare-teacher-inputs-only", action="store_true")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
@@ -107,6 +125,47 @@ def parse_args() -> argparse.Namespace:
         parser.error("--replay-original-reverse-artifacts requires --skip-training")
     if not args.skip_training and args.teacher is None:
         parser.error("--teacher is required unless --skip-training is used")
+    if args.teacher_implementation == "batched" and args.teacher != "malliavin":
+        parser.error("--teacher-implementation batched requires --teacher malliavin")
+    shard_bounds_given = (
+        args.teacher_start_index is not None or args.teacher_end_index is not None
+    )
+    if shard_bounds_given and not args.teacher_dataset_only:
+        parser.error(
+            "--teacher-start-index/--teacher-end-index require "
+            "--teacher-dataset-only"
+        )
+    if args.teacher_dataset_only:
+        if args.teacher != "malliavin":
+            parser.error("--teacher-dataset-only currently requires --teacher malliavin")
+        if args.teacher_start_index is None or args.teacher_end_index is None:
+            parser.error(
+                "--teacher-dataset-only requires --teacher-start-index and "
+                "--teacher-end-index"
+            )
+        required_paths = {
+            "--teacher-initial-points-path": args.teacher_initial_points_path,
+            "--time-samples-path": args.time_samples_path,
+            "--validation-time-samples-path": args.validation_time_samples_path,
+            "--teacher-noises-path": args.teacher_noises_path,
+        }
+        missing_paths = [name for name, value in required_paths.items() if value is None]
+        if missing_paths:
+            parser.error(
+                "--teacher-dataset-only requires saved inputs: "
+                + ", ".join(missing_paths)
+            )
+        if args.skip_training or args.skip_teacher_generation:
+            parser.error(
+                "--teacher-dataset-only cannot be combined with skip-training flags"
+            )
+    if args.prepare_teacher_inputs_only and (
+        args.teacher_dataset_only or args.skip_training or args.skip_teacher_generation
+    ):
+        parser.error(
+            "--prepare-teacher-inputs-only cannot be combined with dataset-only "
+            "or skip-training flags"
+        )
     return args
 
 
@@ -1031,6 +1090,388 @@ def aggregate_reverse_noise_pool(
     return path_increments * (reverse_steps / fine_steps) ** 0.5
 
 
+MALLIAVIN_TEACHER_DETAIL_KEYS = (
+    "endpoint",
+    "endpoint_jacobian",
+    "covariance",
+    "covering",
+    "divergence_term",
+    "skorokhod",
+    "score_weight",
+)
+
+
+def _is_out_of_memory_error(error: RuntimeError) -> bool:
+    oom_type = getattr(torch, "OutOfMemoryError", None)
+    return (
+        (oom_type is not None and isinstance(error, oom_type))
+        or "out of memory" in str(error).lower()
+    )
+
+
+def compute_batched_malliavin_teacher_chunks(
+    *,
+    initial_points: torch.Tensor,
+    times: torch.Tensor,
+    noises: torch.Tensor,
+    batch_size: int,
+    covariance_regularization: float,
+) -> tuple[list[object], list[int]]:
+    """Evaluate ordered chunks, halving only the failed chunk after CUDA OOM."""
+
+    if batch_size < 1:
+        raise ValueError("teacher batch_size must be positive")
+    if times.shape != (initial_points.shape[0],):
+        raise ValueError("times must have shape [n_samples]")
+    if noises.shape[0] != initial_points.shape[0]:
+        raise ValueError("noises sample dimension does not match")
+
+    chunks = []
+    effective_batch_sizes = []
+    cursor = 0
+    active_batch_size = batch_size
+    while cursor < initial_points.shape[0]:
+        current_size = min(active_batch_size, initial_points.shape[0] - cursor)
+        while True:
+            end = cursor + current_size
+            try:
+                teacher = s2_batched_discrete_malliavin_teacher(
+                    initial_points[cursor:end],
+                    noises[cursor:end],
+                    times[cursor:end],
+                    covariance_regularization=covariance_regularization,
+                )
+                break
+            except RuntimeError as error:
+                if not _is_out_of_memory_error(error) or current_size == 1:
+                    raise
+                failed_size = current_size
+                current_size = max(1, current_size // 2)
+                active_batch_size = min(active_batch_size, current_size)
+                if initial_points.device.type == "cuda":
+                    torch.cuda.empty_cache()
+                warnings.warn(
+                    "Malliavin teacher batch ran out of memory; retrying the "
+                    f"same samples with batch size {current_size} "
+                    f"instead of {failed_size}",
+                    RuntimeWarning,
+                    stacklevel=1,
+                )
+        chunks.append(teacher)
+        effective_batch_sizes.append(current_size)
+        cursor += current_size
+    return chunks, effective_batch_sizes
+
+
+def build_malliavin_teacher_dataset_batched(
+    *,
+    initial_points: torch.Tensor,
+    times: torch.Tensor,
+    noises: torch.Tensor,
+    batch_size: int,
+    covariance_regularization: float,
+) -> tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], list[int]]:
+    """Build the ordinary dataset with exact sample-batched teacher chunks."""
+
+    chunks, effective_batch_sizes = compute_batched_malliavin_teacher_chunks(
+        initial_points=initial_points,
+        times=times,
+        noises=noises,
+        batch_size=batch_size,
+        covariance_regularization=covariance_regularization,
+    )
+
+    def concatenate(attribute: str) -> torch.Tensor:
+        return torch.cat(
+            [getattr(chunk, attribute).detach() for chunk in chunks],
+            dim=0,
+        )
+
+    details = {
+        key: concatenate(key) for key in MALLIAVIN_TEACHER_DETAIL_KEYS
+    }
+    dataset = {
+        "initial_point": initial_points.detach(),
+        "time": times.detach(),
+        "noise": noises.detach(),
+        "endpoint": details["endpoint"],
+        "score_target": details["score_weight"],
+        "skorokhod": details["skorokhod"],
+    }
+    return dataset, details, effective_batch_sizes
+
+
+def _load_split_tensor_payload(
+    path: Path,
+    *,
+    train_key: str,
+    validation_key: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if not path.is_file():
+        raise FileNotFoundError(f"missing saved teacher input: {path}")
+    payload = torch.load(path, map_location="cpu")
+    if not isinstance(payload, dict):
+        raise ValueError(f"teacher input must be a dictionary: {path}")
+    missing = [key for key in (train_key, validation_key) if key not in payload]
+    if missing:
+        raise ValueError(f"teacher input {path} is missing keys: {missing}")
+    train = payload[train_key]
+    validation = payload[validation_key]
+    if not isinstance(train, torch.Tensor) or not isinstance(validation, torch.Tensor):
+        raise TypeError(f"teacher input values must be tensors: {path}")
+    return train, validation
+
+
+def load_saved_teacher_shard_inputs(
+    *,
+    initial_points_path: Path,
+    train_times_path: Path,
+    validation_times_path: Path,
+    noises_path: Path,
+    train_size: int,
+    validation_size: int,
+    n_steps: int,
+    dtype: torch.dtype,
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Load fixed shard inputs without drawing any random variables."""
+
+    train_initial, validation_initial = _load_split_tensor_payload(
+        initial_points_path,
+        train_key="train_initial_points",
+        validation_key="validation_initial_points",
+    )
+    if not train_times_path.is_file() or not validation_times_path.is_file():
+        raise FileNotFoundError("missing saved train/validation teacher times")
+    train_times = _time_tensor_from_payload(
+        torch.load(train_times_path, map_location="cpu"),
+        key="train_times",
+    )
+    validation_times = _time_tensor_from_payload(
+        torch.load(validation_times_path, map_location="cpu"),
+        key="validation_times",
+    )
+    train_noises, validation_noises = _load_split_tensor_payload(
+        noises_path,
+        train_key="train_noises",
+        validation_key="validation_noises",
+    )
+
+    expected = {
+        "train_initial_points": (train_initial, (train_size, 3)),
+        "validation_initial_points": (validation_initial, (validation_size, 3)),
+        "train_times": (train_times, (train_size,)),
+        "validation_times": (validation_times, (validation_size,)),
+        "train_noises": (train_noises, (train_size, n_steps, 3)),
+        "validation_noises": (
+            validation_noises,
+            (validation_size, n_steps, 3),
+        ),
+    }
+    for name, (tensor, shape) in expected.items():
+        if tuple(tensor.shape) != shape:
+            raise ValueError(f"{name} must have shape {shape}, got {tuple(tensor.shape)}")
+        if tensor.dtype != dtype:
+            raise ValueError(
+                f"{name} must have dtype {dtype}, got {tensor.dtype}; "
+                "shard workers do not convert saved inputs"
+            )
+        if not bool(torch.isfinite(tensor).all()):
+            raise ValueError(f"{name} contains non-finite values")
+
+    initial_points = torch.cat((train_initial, validation_initial), dim=0)
+    times = torch.cat((train_times, validation_times), dim=0)
+    noises = torch.cat((train_noises, validation_noises), dim=0)
+    return (
+        initial_points.to(device=device),
+        times.to(device=device),
+        noises.to(device=device),
+    )
+
+
+def build_malliavin_teacher_shard(
+    *,
+    initial_points: torch.Tensor,
+    times: torch.Tensor,
+    noises: torch.Tensor,
+    start: int,
+    end: int,
+    train_size: int,
+    validation_size: int,
+    covariance_regularization: float,
+    teacher_implementation: str = "scalar",
+    teacher_batch_size: int = 4,
+) -> Dict[str, object]:
+    """Run one Malliavin implementation over a global shard index range."""
+
+    total_size = train_size + validation_size
+    if initial_points.shape != (total_size, 3):
+        raise ValueError("combined initial_points shape does not match split sizes")
+    if times.shape != (total_size,):
+        raise ValueError("combined times shape does not match split sizes")
+    if noises.ndim != 3 or noises.shape[0] != total_size or noises.shape[2] != 3:
+        raise ValueError("combined noises must have shape [total_size, n_steps, 3]")
+    if not 0 <= start < end <= total_size:
+        raise ValueError(
+            f"teacher shard range must satisfy 0 <= start < end <= {total_size}"
+        )
+    input_dtype = initial_points.dtype
+    if times.dtype != input_dtype or noises.dtype != input_dtype:
+        raise ValueError("initial_points, times, and noises must have one dtype")
+
+    if teacher_implementation == "batched":
+        dataset, teacher_details, effective_batch_sizes = (
+            build_malliavin_teacher_dataset_batched(
+                initial_points=initial_points[start:end],
+                times=times[start:end],
+                noises=noises[start:end],
+                batch_size=teacher_batch_size,
+                covariance_regularization=covariance_regularization,
+            )
+        )
+        dataset = {key: value.detach().cpu() for key, value in dataset.items()}
+        teacher_details = {
+            key: value.detach().cpu() for key, value in teacher_details.items()
+        }
+    elif teacher_implementation == "scalar":
+        dataset_lists: Dict[str, list[torch.Tensor]] = {
+            "initial_point": [],
+            "time": [],
+            "noise": [],
+            "endpoint": [],
+            "score_target": [],
+            "skorokhod": [],
+        }
+        detail_lists: Dict[str, list[torch.Tensor]] = {
+            key: [] for key in MALLIAVIN_TEACHER_DETAIL_KEYS
+        }
+        for global_index in range(start, end):
+            initial_point = initial_points[global_index]
+            terminal_time = times[global_index]
+            noise = noises[global_index]
+            teacher_state = s2_discrete_malliavin_teacher(
+                initial_point,
+                noise,
+                float(terminal_time.detach().cpu()),
+                covariance_regularization=covariance_regularization,
+                vectorize_jacobian=True,
+            )
+            dataset_lists["initial_point"].append(initial_point)
+            dataset_lists["time"].append(terminal_time)
+            dataset_lists["noise"].append(noise)
+            dataset_lists["endpoint"].append(teacher_state.endpoint)
+            dataset_lists["score_target"].append(teacher_state.score_weight)
+            dataset_lists["skorokhod"].append(teacher_state.skorokhod)
+            for key in MALLIAVIN_TEACHER_DETAIL_KEYS:
+                detail_lists[key].append(getattr(teacher_state, key))
+        dataset = {
+            key: torch.stack(values).detach().cpu()
+            for key, values in dataset_lists.items()
+        }
+        teacher_details = {
+            key: torch.stack(values).detach().cpu()
+            for key, values in detail_lists.items()
+        }
+        effective_batch_sizes = [1] * (end - start)
+    else:
+        raise ValueError(f"unknown teacher implementation: {teacher_implementation!r}")
+
+    dtype_name = str(input_dtype).removeprefix("torch.")
+    return {
+        "format_version": 1,
+        "teacher": "malliavin",
+        "start": start,
+        "end": end,
+        "total_size": total_size,
+        "train_size": train_size,
+        "validation_size": validation_size,
+        "dataset_keys": list(dataset),
+        "detail_keys": list(teacher_details),
+        "dtype": dtype_name,
+        "teacher_implementation": teacher_implementation,
+        "requested_teacher_batch_size": teacher_batch_size,
+        "effective_teacher_batch_sizes": effective_batch_sizes,
+        "global_indices": torch.arange(start, end, dtype=torch.int64),
+        "dataset": dataset,
+        "teacher_details": teacher_details,
+    }
+
+
+def run_teacher_dataset_shard(
+    args: argparse.Namespace,
+    *,
+    output_dir: Path,
+    log,
+) -> None:
+    """Generate and save exactly one Malliavin teacher shard, then stop."""
+
+    dtype = to_dtype(args.dtype)
+    device = resolve_device(args.device)
+    initial_points, times, noises = load_saved_teacher_shard_inputs(
+        initial_points_path=args.teacher_initial_points_path,
+        train_times_path=args.time_samples_path,
+        validation_times_path=args.validation_time_samples_path,
+        noises_path=args.teacher_noises_path,
+        train_size=args.train_size,
+        validation_size=args.validation_size,
+        n_steps=args.n_steps,
+        dtype=dtype,
+        device=device,
+    )
+    start = int(args.teacher_start_index)
+    end = int(args.teacher_end_index)
+    log(
+        f"generating {args.teacher_implementation} Malliavin teacher shard "
+        f"[{start}, {end}) on {device}"
+    )
+    started = time.perf_counter()
+    payload = build_malliavin_teacher_shard(
+        initial_points=initial_points,
+        times=times,
+        noises=noises,
+        start=start,
+        end=end,
+        train_size=args.train_size,
+        validation_size=args.validation_size,
+        covariance_regularization=args.covariance_regularization,
+        teacher_implementation=args.teacher_implementation,
+        teacher_batch_size=args.teacher_batch_size,
+    )
+    payload["generation_seconds"] = time.perf_counter() - started
+    shard_path = output_dir / f"teacher_dataset_shard_{start:06d}_{end:06d}.pt"
+    torch.save(payload, shard_path)
+    with (output_dir / "teacher_shard_config.json").open(
+        "w", encoding="utf-8"
+    ) as handle:
+        json.dump(
+            {
+                "teacher": "malliavin",
+                "start": start,
+                "end": end,
+                "total_size": args.train_size + args.validation_size,
+                "train_size": args.train_size,
+                "validation_size": args.validation_size,
+                "n_steps": args.n_steps,
+                "dtype": args.dtype,
+                "device": device,
+                "teacher_implementation": args.teacher_implementation,
+                "requested_teacher_batch_size": args.teacher_batch_size,
+                "effective_teacher_batch_sizes": payload[
+                    "effective_teacher_batch_sizes"
+                ],
+                "initial_points_path": str(args.teacher_initial_points_path),
+                "train_times_path": str(args.time_samples_path),
+                "validation_times_path": str(args.validation_time_samples_path),
+                "teacher_noises_path": str(args.teacher_noises_path),
+                "shard_path": str(shard_path),
+                "generation_seconds": payload["generation_seconds"],
+            },
+            handle,
+            indent=2,
+        )
+    log(f"saved teacher shard: {shard_path}")
+
+
 def build_teacher_dataset(
     *,
     initial_points: torch.Tensor,
@@ -1611,6 +2052,9 @@ def main() -> None:
         with run_log_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
 
+    if args.teacher_dataset_only:
+        run_teacher_dataset_shard(args, output_dir=output_dir, log=log)
+        return
     if args.skip_teacher_generation and not args.skip_training:
         raise ValueError("--skip-teacher-generation requires --skip-training")
     if args.skip_training:
@@ -1655,11 +2099,21 @@ def main() -> None:
 
     train_initial = normalize(points[train_idx.to(device=device)])
     validation_initial = normalize(points[validation_idx.to(device=device)])
+    initial_points_path = output_dir / "teacher_initial_points.pt"
+    torch.save(
+        {
+            "train_initial_points": train_initial.detach().cpu(),
+            "validation_initial_points": validation_initial.detach().cpu(),
+        },
+        initial_points_path,
+    )
 
     time_samples_path = output_dir / "time_samples.pt"
     validation_time_samples_path = output_dir / "validation_time_samples.pt"
     noise_samples_path = output_dir / "teacher_noises.pt"
-    if args.teacher != "heat":
+    if args.teacher_noises_path is not None:
+        sibling_noise = args.teacher_noises_path
+    elif args.teacher != "heat":
         sibling = output_dir.parent / "heat"
         sibling_noise = sibling / "teacher_noises.pt"
     else:
@@ -1749,6 +2203,8 @@ def main() -> None:
         f"validation={validation_time_samples_path.name}"
     )
 
+    if args.teacher_noises_path is not None and not sibling_noise.exists():
+        raise FileNotFoundError(f"missing teacher noises: {sibling_noise}")
     if sibling_noise is not None and sibling_noise.exists():
         payload = torch.load(sibling_noise, map_location="cpu")
         train_noises = payload["train_noises"].to(device=device, dtype=dtype)
@@ -1773,23 +2229,54 @@ def main() -> None:
         noise_samples_path,
     )
 
+    if args.prepare_teacher_inputs_only:
+        log(
+            "saved teacher inputs only: "
+            f"initial_points={initial_points_path.name} "
+            f"times={time_samples_path.name}/{validation_time_samples_path.name} "
+            f"noises={noise_samples_path.name}"
+        )
+        return
+
     teacher_started = time.perf_counter()
-    train_dataset = build_teacher_dataset(
-        initial_points=train_initial,
-        times=train_times,
-        noises=train_noises,
-        teacher=args.teacher,
-        covariance_regularization=args.covariance_regularization,
-        heat_terms=args.heat_terms,
-    )
-    validation_dataset = build_teacher_dataset(
-        initial_points=validation_initial,
-        times=validation_times,
-        noises=validation_noises,
-        teacher=args.teacher,
-        covariance_regularization=args.covariance_regularization,
-        heat_terms=args.heat_terms,
-    )
+    if args.teacher == "malliavin" and args.teacher_implementation == "batched":
+        train_dataset, _, train_effective_teacher_batch_sizes = (
+            build_malliavin_teacher_dataset_batched(
+                initial_points=train_initial,
+                times=train_times,
+                noises=train_noises,
+                batch_size=args.teacher_batch_size,
+                covariance_regularization=args.covariance_regularization,
+            )
+        )
+        validation_dataset, _, validation_effective_teacher_batch_sizes = (
+            build_malliavin_teacher_dataset_batched(
+                initial_points=validation_initial,
+                times=validation_times,
+                noises=validation_noises,
+                batch_size=args.teacher_batch_size,
+                covariance_regularization=args.covariance_regularization,
+            )
+        )
+    else:
+        train_dataset = build_teacher_dataset(
+            initial_points=train_initial,
+            times=train_times,
+            noises=train_noises,
+            teacher=args.teacher,
+            covariance_regularization=args.covariance_regularization,
+            heat_terms=args.heat_terms,
+        )
+        validation_dataset = build_teacher_dataset(
+            initial_points=validation_initial,
+            times=validation_times,
+            noises=validation_noises,
+            teacher=args.teacher,
+            covariance_regularization=args.covariance_regularization,
+            heat_terms=args.heat_terms,
+        )
+        train_effective_teacher_batch_sizes = [1] * args.train_size
+        validation_effective_teacher_batch_sizes = [1] * args.validation_size
     teacher_generation_seconds = time.perf_counter() - teacher_started
 
     train_started = time.perf_counter()
@@ -1906,6 +2393,18 @@ def main() -> None:
         "best_train_loss": best_train_loss,
         "validation_loss": validation_loss,
         "teacher_generation_seconds": teacher_generation_seconds,
+        "teacher_implementation": args.teacher_implementation,
+        "requested_teacher_batch_size": args.teacher_batch_size,
+        "train_teacher_batching": {
+            "minimum_batch_size": min(train_effective_teacher_batch_sizes),
+            "maximum_batch_size": max(train_effective_teacher_batch_sizes),
+            "n_chunks": len(train_effective_teacher_batch_sizes),
+        },
+        "validation_teacher_batching": {
+            "minimum_batch_size": min(validation_effective_teacher_batch_sizes),
+            "maximum_batch_size": max(validation_effective_teacher_batch_sizes),
+            "n_chunks": len(validation_effective_teacher_batch_sizes),
+        },
         "training_seconds": training_seconds,
         "reverse_sampling_seconds": reverse_sampling_seconds,
         "s2_rbf_mmd": mmd_value,
