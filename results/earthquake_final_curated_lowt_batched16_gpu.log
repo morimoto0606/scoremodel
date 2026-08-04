@@ -1,0 +1,20 @@
+[2026-08-04 22:57:02] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-04 22:57:02] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-04 22:57:03] time samples ready: mode=curated-lowt train=time_samples.pt validation=validation_time_samples.pt
+  epoch=  500  loss=1.872193e-01  best=1.899998e-01
+  epoch= 1000  loss=3.066397e-02  best=3.065937e-02
+  epoch= 1500  loss=8.279249e-03  best=7.389956e-03
+  epoch= 2000  loss=3.064692e-03  best=2.791332e-03
+  epoch= 2500  loss=1.957299e-03  best=1.785878e-03
+  epoch= 3000  loss=1.177558e-03  best=1.580039e-03
+[2026-08-04 23:33:39] teacher=malliavin training_path=marginal_skorokhod
+[2026-08-04 23:33:39] final_train_loss=1.580039e-03 validation_loss=3.842596e+01
+[2026-08-04 23:33:39] mmd=1.768667e-02 geodesic_mean=1.076423e-01 norm_error=1.569383e-17
+Traceback (most recent call last):
+  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 2524, in <module>
+    main()
+  File "/home/export/home/ymorimoto/github/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 2439, in main
+    from scoremodel_ext.manifold.earthquake_smoke_viz import (
+  File "/home/export/home/ymorimoto/github/scoremodel/src/scoremodel_ext/manifold/earthquake_smoke_viz.py", line 13, in <module>
+    from scripts.reproduce_earthquake_s2_malliavin import (
+ModuleNotFoundError: No module named 'scripts'

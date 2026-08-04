@@ -1,0 +1,246 @@
+{
+  "teacher": "heat",
+  "training_path": "direct_score",
+  "initial_train_loss": 1.001623468279303,
+  "final_train_loss": 0.9914844434495536,
+  "best_train_loss": 0.9914844434495536,
+  "validation_loss": 7.3732061669876545,
+  "teacher_generation_seconds": 6.515536695718765,
+  "teacher_implementation": "scalar",
+  "requested_teacher_batch_size": 4,
+  "train_teacher_batching": {
+    "minimum_batch_size": 1,
+    "maximum_batch_size": 1,
+    "n_chunks": 256
+  },
+  "validation_teacher_batching": {
+    "minimum_batch_size": 1,
+    "maximum_batch_size": 1,
+    "n_chunks": 64
+  },
+  "training_seconds": 1.3564914464950562,
+  "reverse_sampling_seconds": 1.2177242264151573,
+  "s2_rbf_mmd": 0.21146513587829974,
+  "nearest_neighbor_geodesic_mean": 0.37648435095829663,
+  "nearest_neighbor_geodesic_median": 0.3766502361145859,
+  "nearest_neighbor_geodesic_max": 1.0800700423972265,
+  "generated_sample_norm_error": 1.3010426069826053e-17,
+  "nan_rate": 0.0,
+  "generated_all_finite": true,
+  "generated_sample_count": 128,
+  "time_sampling": "uniform",
+  "curated_times": [
+    0.005,
+    0.01,
+    0.02,
+    0.035,
+    0.05,
+    0.075,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3
+  ],
+  "time_histogram": {
+    "train": {
+      "0.005": 2,
+      "0.010": 1,
+      "0.020": 2,
+      "0.035": 6,
+      "0.050": 7,
+      "0.075": 5,
+      "0.100": 6,
+      "0.150": 13,
+      "0.200": 10,
+      "0.250": 10,
+      "0.300": 194
+    },
+    "validation": {
+      "0.005": 0,
+      "0.010": 0,
+      "0.020": 0,
+      "0.035": 1,
+      "0.050": 1,
+      "0.075": 2,
+      "0.100": 3,
+      "0.150": 4,
+      "0.200": 3,
+      "0.250": 3,
+      "0.300": 47
+    }
+  },
+  "samples_per_time": {
+    "train": null,
+    "validation": null
+  },
+  "time_diagnostics": {
+    "train": [
+      {
+        "time": 0.005,
+        "count": 2,
+        "target_norm_mean": 9.963388872268766,
+        "target_norm_std": 6.243701932065908,
+        "time_bin_target_dispersion": 0.8213323537970482
+      },
+      {
+        "time": 0.01,
+        "count": 1,
+        "target_norm_mean": 38.336860492220254,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.02,
+        "count": 2,
+        "target_norm_mean": 31.912593998904143,
+        "target_norm_std": 3.7192578063011865,
+        "time_bin_target_dispersion": 0.36155915423768836
+      },
+      {
+        "time": 0.035,
+        "count": 6,
+        "target_norm_mean": 11.581414446769195,
+        "target_norm_std": 7.972885612274999,
+        "time_bin_target_dispersion": 0.9222814830305226
+      },
+      {
+        "time": 0.05,
+        "count": 7,
+        "target_norm_mean": 17.165469128924023,
+        "target_norm_std": 11.227546305623633,
+        "time_bin_target_dispersion": 0.8627138023084553
+      },
+      {
+        "time": 0.075,
+        "count": 5,
+        "target_norm_mean": 11.653444019059757,
+        "target_norm_std": 4.876158660341266,
+        "time_bin_target_dispersion": 0.7978057285344349
+      },
+      {
+        "time": 0.1,
+        "count": 6,
+        "target_norm_mean": 7.898974768762594,
+        "target_norm_std": 2.873040464786462,
+        "time_bin_target_dispersion": 0.8218623381173216
+      },
+      {
+        "time": 0.15,
+        "count": 13,
+        "target_norm_mean": 6.751311845612542,
+        "target_norm_std": 2.574466103740102,
+        "time_bin_target_dispersion": 0.9422632809198431
+      },
+      {
+        "time": 0.2,
+        "count": 10,
+        "target_norm_mean": 3.7661199043498517,
+        "target_norm_std": 1.9026654682803998,
+        "time_bin_target_dispersion": 0.8979876440286942
+      },
+      {
+        "time": 0.25,
+        "count": 10,
+        "target_norm_mean": 2.7618939671988394,
+        "target_norm_std": 0.970423879090185,
+        "time_bin_target_dispersion": 0.9705126554054259
+      },
+      {
+        "time": 0.3,
+        "count": 194,
+        "target_norm_mean": 0.9864570792465441,
+        "target_norm_std": 0.8716339505396108,
+        "time_bin_target_dispersion": 0.9764304598016603
+      }
+    ],
+    "validation": [
+      {
+        "time": 0.005,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.01,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.02,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.035,
+        "count": 1,
+        "target_norm_mean": 26.05379843127442,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.05,
+        "count": 1,
+        "target_norm_mean": 3.8757934774546072,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.075,
+        "count": 2,
+        "target_norm_mean": 5.586993110831099,
+        "target_norm_std": 2.7488614508951823,
+        "time_bin_target_dispersion": 0.6719621533845374
+      },
+      {
+        "time": 0.1,
+        "count": 3,
+        "target_norm_mean": 7.4747469621507605,
+        "target_norm_std": 4.654033883232397,
+        "time_bin_target_dispersion": 0.7975021434492244
+      },
+      {
+        "time": 0.15,
+        "count": 4,
+        "target_norm_mean": 5.507544415631708,
+        "target_norm_std": 3.664588878442053,
+        "time_bin_target_dispersion": 0.9301561952651131
+      },
+      {
+        "time": 0.2,
+        "count": 3,
+        "target_norm_mean": 4.2527608626524955,
+        "target_norm_std": 1.533922704598284,
+        "time_bin_target_dispersion": 0.8834935396690702
+      },
+      {
+        "time": 0.25,
+        "count": 3,
+        "target_norm_mean": 3.7508547903613416,
+        "target_norm_std": 0.9913575107015978,
+        "time_bin_target_dispersion": 0.701778041483083
+      },
+      {
+        "time": 0.3,
+        "count": 47,
+        "target_norm_mean": 1.0742277242690972,
+        "target_norm_std": 0.9679266439301767,
+        "time_bin_target_dispersion": 0.9495811144830477
+      }
+    ]
+  },
+  "diagnostic_target_key": "score_target",
+  "time_bin_target_dispersion_definition": "Within each shared time bin: RMS(score_target - bin mean) / RMS(score_target).",
+  "device": "cuda",
+  "dtype": "float64",
+  "beta_schedule": "linear",
+  "beta_0": 0.001,
+  "beta_f": 5.0,
+  "beta_t0": 0.0,
+  "beta_tf": 1.0
+}

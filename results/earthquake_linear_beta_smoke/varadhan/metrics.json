@@ -1,0 +1,246 @@
+{
+  "teacher": "varadhan",
+  "training_path": "direct_score",
+  "initial_train_loss": 0.9986687657154737,
+  "final_train_loss": 0.993764525507075,
+  "best_train_loss": 0.993764525507075,
+  "validation_loss": 8.1827798905484,
+  "teacher_generation_seconds": 1.468675408512354,
+  "teacher_implementation": "scalar",
+  "requested_teacher_batch_size": 4,
+  "train_teacher_batching": {
+    "minimum_batch_size": 1,
+    "maximum_batch_size": 1,
+    "n_chunks": 256
+  },
+  "validation_teacher_batching": {
+    "minimum_batch_size": 1,
+    "maximum_batch_size": 1,
+    "n_chunks": 64
+  },
+  "training_seconds": 1.3647891581058502,
+  "reverse_sampling_seconds": 1.2354409098625183,
+  "s2_rbf_mmd": 0.30969356791083813,
+  "nearest_neighbor_geodesic_mean": 0.38725842568223456,
+  "nearest_neighbor_geodesic_median": 0.40454121468872584,
+  "nearest_neighbor_geodesic_max": 0.8199376072014406,
+  "generated_sample_norm_error": 6.938893903907228e-18,
+  "nan_rate": 0.0,
+  "generated_all_finite": true,
+  "generated_sample_count": 128,
+  "time_sampling": "uniform",
+  "curated_times": [
+    0.005,
+    0.01,
+    0.02,
+    0.035,
+    0.05,
+    0.075,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3
+  ],
+  "time_histogram": {
+    "train": {
+      "0.005": 2,
+      "0.010": 1,
+      "0.020": 2,
+      "0.035": 6,
+      "0.050": 7,
+      "0.075": 5,
+      "0.100": 6,
+      "0.150": 13,
+      "0.200": 10,
+      "0.250": 10,
+      "0.300": 194
+    },
+    "validation": {
+      "0.005": 0,
+      "0.010": 0,
+      "0.020": 0,
+      "0.035": 1,
+      "0.050": 1,
+      "0.075": 2,
+      "0.100": 3,
+      "0.150": 4,
+      "0.200": 3,
+      "0.250": 3,
+      "0.300": 47
+    }
+  },
+  "samples_per_time": {
+    "train": null,
+    "validation": null
+  },
+  "time_diagnostics": {
+    "train": [
+      {
+        "time": 0.005,
+        "count": 2,
+        "target_norm_mean": 226.9115654315887,
+        "target_norm_std": 209.00607718887153,
+        "time_bin_target_dispersion": 0.7299563566580484
+      },
+      {
+        "time": 0.01,
+        "count": 1,
+        "target_norm_mean": 52.988631625746414,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.02,
+        "count": 2,
+        "target_norm_mean": 32.40930212877902,
+        "target_norm_std": 3.5407355792981168,
+        "time_bin_target_dispersion": 0.3598699324467806
+      },
+      {
+        "time": 0.035,
+        "count": 6,
+        "target_norm_mean": 11.592587977528488,
+        "target_norm_std": 7.971679984349493,
+        "time_bin_target_dispersion": 0.9222570243794573
+      },
+      {
+        "time": 0.05,
+        "count": 7,
+        "target_norm_mean": 17.184497452649698,
+        "target_norm_std": 11.236664976403183,
+        "time_bin_target_dispersion": 0.8627321388268913
+      },
+      {
+        "time": 0.075,
+        "count": 5,
+        "target_norm_mean": 11.679310182628246,
+        "target_norm_std": 4.8845305962239856,
+        "time_bin_target_dispersion": 0.7977767655316064
+      },
+      {
+        "time": 0.1,
+        "count": 6,
+        "target_norm_mean": 7.9366506594656485,
+        "target_norm_std": 2.8850709450088416,
+        "time_bin_target_dispersion": 0.8216094326045231
+      },
+      {
+        "time": 0.15,
+        "count": 13,
+        "target_norm_mean": 6.814241951366771,
+        "target_norm_std": 2.594485286496976,
+        "time_bin_target_dispersion": 0.9421272180066752
+      },
+      {
+        "time": 0.2,
+        "count": 10,
+        "target_norm_mean": 3.8323874969461897,
+        "target_norm_std": 1.935542031234646,
+        "time_bin_target_dispersion": 0.898118149722946
+      },
+      {
+        "time": 0.25,
+        "count": 10,
+        "target_norm_mean": 2.8384416214911967,
+        "target_norm_std": 0.9947926194281621,
+        "time_bin_target_dispersion": 0.9704089517798725
+      },
+      {
+        "time": 0.3,
+        "count": 194,
+        "target_norm_mean": 1.2828386095801338,
+        "target_norm_std": 0.8850301465780761,
+        "time_bin_target_dispersion": 0.974700109627015
+      }
+    ],
+    "validation": [
+      {
+        "time": 0.005,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.01,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.02,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.035,
+        "count": 1,
+        "target_norm_mean": 26.071255391186366,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.05,
+        "count": 1,
+        "target_norm_mean": 3.8808478490464755,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.075,
+        "count": 2,
+        "target_norm_mean": 5.60332785004491,
+        "target_norm_std": 2.756266877528442,
+        "time_bin_target_dispersion": 0.671953657461689
+      },
+      {
+        "time": 0.1,
+        "count": 3,
+        "target_norm_mean": 7.509550622200841,
+        "target_norm_std": 4.674685397411163,
+        "time_bin_target_dispersion": 0.7974908123595974
+      },
+      {
+        "time": 0.15,
+        "count": 4,
+        "target_norm_mean": 5.549945323133366,
+        "target_norm_std": 3.691874021734997,
+        "time_bin_target_dispersion": 0.9301447979422113
+      },
+      {
+        "time": 0.2,
+        "count": 3,
+        "target_norm_mean": 4.330747700361835,
+        "target_norm_std": 1.5659627418934174,
+        "time_bin_target_dispersion": 0.8835537046969215
+      },
+      {
+        "time": 0.25,
+        "count": 3,
+        "target_norm_mean": 3.8425210061429453,
+        "target_norm_std": 1.0108193078921237,
+        "time_bin_target_dispersion": 0.7019558619315155
+      },
+      {
+        "time": 0.3,
+        "count": 47,
+        "target_norm_mean": 1.327556199351877,
+        "target_norm_std": 0.980206488825657,
+        "time_bin_target_dispersion": 0.9441404150162059
+      }
+    ]
+  },
+  "diagnostic_target_key": "score_target",
+  "time_bin_target_dispersion_definition": "Within each shared time bin: RMS(score_target - bin mean) / RMS(score_target).",
+  "device": "cuda",
+  "dtype": "float64",
+  "beta_schedule": "linear",
+  "beta_0": 0.001,
+  "beta_f": 5.0,
+  "beta_t0": 0.0,
+  "beta_tf": 1.0
+}

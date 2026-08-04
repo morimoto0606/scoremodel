@@ -39,3 +39,7 @@ cache/
 upstream/
 upstream/*
 upstream/ER-SDE-Solver 
+# Profiler traces
+results/**/*_trace.json
+results/**/scalar_trace.json
+results/**/batch_*_trace.json

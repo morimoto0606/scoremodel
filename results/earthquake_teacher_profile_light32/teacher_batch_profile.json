@@ -1,0 +1,77 @@
+{
+  "device": "cuda",
+  "dtype": "float64",
+  "export_traces": false,
+  "results": [
+    {
+      "implementation": "scalar",
+      "batch_size": 1,
+      "effective_batch_size": 1,
+      "oom_fallback": false,
+      "n_samples": 16,
+      "n_steps": 32,
+      "repeats": 1,
+      "wall_time_seconds": 129.99725761264563,
+      "cuda_event_seconds": 129.9968203125,
+      "peak_memory_allocated": 25667584,
+      "peak_memory_reserved": 31457280,
+      "speedup_vs_scalar": 1.0
+    },
+    {
+      "implementation": "batched",
+      "batch_size": 1,
+      "effective_batch_size": 1,
+      "oom_fallback": false,
+      "n_samples": 16,
+      "n_steps": 32,
+      "repeats": 1,
+      "wall_time_seconds": 13.777240082621574,
+      "cuda_event_seconds": 13.7771181640625,
+      "peak_memory_allocated": 23134720,
+      "peak_memory_reserved": 29360128,
+      "speedup_vs_scalar": 9.435653064986681
+    },
+    {
+      "implementation": "batched",
+      "batch_size": 4,
+      "effective_batch_size": 4,
+      "oom_fallback": false,
+      "n_samples": 16,
+      "n_steps": 32,
+      "repeats": 1,
+      "wall_time_seconds": 3.241648383438587,
+      "cuda_event_seconds": 3.241565185546875,
+      "peak_memory_allocated": 38086656,
+      "peak_memory_reserved": 60817408,
+      "speedup_vs_scalar": 40.10220796209572
+    },
+    {
+      "implementation": "batched",
+      "batch_size": 8,
+      "effective_batch_size": 8,
+      "oom_fallback": false,
+      "n_samples": 16,
+      "n_steps": 32,
+      "repeats": 1,
+      "wall_time_seconds": 1.6332509443163872,
+      "cuda_event_seconds": 1.633171142578125,
+      "peak_memory_allocated": 58444800,
+      "peak_memory_reserved": 96468992,
+      "speedup_vs_scalar": 79.59417263160208
+    },
+    {
+      "implementation": "batched",
+      "batch_size": 16,
+      "effective_batch_size": 16,
+      "oom_fallback": false,
+      "n_samples": 16,
+      "n_steps": 32,
+      "repeats": 1,
+      "wall_time_seconds": 0.827243272215128,
+      "cuda_event_seconds": 0.8271729736328125,
+      "peak_memory_allocated": 98994176,
+      "peak_memory_reserved": 148897792,
+      "speedup_vs_scalar": 157.14513732405348
+    }
+  ]
+}

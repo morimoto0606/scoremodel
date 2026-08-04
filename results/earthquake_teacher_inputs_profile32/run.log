@@ -1,0 +1,4 @@
+[2026-08-04 21:08:08] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-04 21:08:08] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-04 21:08:08] time samples ready: mode=curated-lowt train=time_samples.pt validation=validation_time_samples.pt
+[2026-08-04 21:08:08] saved teacher inputs only: initial_points=teacher_initial_points.pt times=time_samples.pt/validation_time_samples.pt noises=teacher_noises.pt
