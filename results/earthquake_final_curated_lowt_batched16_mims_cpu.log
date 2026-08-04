@@ -1,0 +1,26 @@
+========================================
+MIMS CPU MALLIAVIN BATCHED16 START
+DATE=Tue Aug  4 22:30:17 JST 2026
+HOST=mims-smp
+OMP_NUM_THREADS=48
+========================================
+[2026-08-04 22:30:18] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-04 22:30:18] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-04 22:30:18] time samples ready: mode=curated-lowt train=time_samples.pt validation=validation_time_samples.pt
+  epoch=  500  loss=1.766543e-01  best=1.637618e-01
+  epoch= 1000  loss=2.829459e-02  best=2.629650e-02
+  epoch= 1500  loss=4.686876e-03  best=4.498936e-03
+  epoch= 2000  loss=1.193235e-03  best=1.189138e-03
+  epoch= 2500  loss=5.914192e-04  best=5.922373e-04
+  epoch= 3000  loss=5.555535e-04  best=5.096687e-04
+[2026-08-04 22:42:48] teacher=malliavin training_path=marginal_skorokhod
+[2026-08-04 22:42:48] final_train_loss=5.096687e-04 validation_loss=3.795415e+01
+[2026-08-04 22:42:48] mmd=1.946716e-02 geodesic_mean=1.084428e-01 norm_error=6.369688e-18
+Traceback (most recent call last):
+  File "/home/r0700008/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 2524, in <module>
+    main()
+  File "/home/r0700008/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py", line 2439, in main
+    from scoremodel_ext.manifold.earthquake_smoke_viz import (
+  File "/home/r0700008/scoremodel/src/scoremodel_ext/manifold/earthquake_smoke_viz.py", line 13, in <module>
+    from scripts.reproduce_earthquake_s2_malliavin import (
+ModuleNotFoundError: No module named 'scripts'

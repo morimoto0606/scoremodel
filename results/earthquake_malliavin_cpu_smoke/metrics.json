@@ -1,0 +1,253 @@
+{
+  "teacher": "malliavin",
+  "training_path": "marginal_skorokhod",
+  "initial_train_loss": 0.9714236041238985,
+  "final_train_loss": 0.9652888672773182,
+  "best_train_loss": 0.9652888672773182,
+  "validation_loss": 38.24552691822678,
+  "teacher_generation_seconds": 1.3805412761867046,
+  "training_seconds": 0.6759124845266342,
+  "reverse_sampling_seconds": 0.045393336564302444,
+  "s2_rbf_mmd": 0.038437616810614306,
+  "nearest_neighbor_geodesic_mean": 0.8203509012570447,
+  "nearest_neighbor_geodesic_median": 0.7726488206695614,
+  "nearest_neighbor_geodesic_max": 1.5137977380267473,
+  "generated_sample_norm_error": 1.0408340855860843e-17,
+  "nan_rate": 0.0,
+  "generated_all_finite": true,
+  "generated_sample_count": 32,
+  "time_sampling": "curated-lowt",
+  "curated_times": [
+    0.005,
+    0.01,
+    0.02,
+    0.035,
+    0.05,
+    0.075,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3
+  ],
+  "time_histogram": {
+    "train": {
+      "0.005": 3,
+      "0.010": 3,
+      "0.020": 3,
+      "0.035": 3,
+      "0.050": 3,
+      "0.075": 3,
+      "0.100": 3,
+      "0.150": 3,
+      "0.200": 3,
+      "0.250": 3,
+      "0.300": 2
+    },
+    "validation": {
+      "0.005": 1,
+      "0.010": 1,
+      "0.020": 1,
+      "0.035": 1,
+      "0.050": 1,
+      "0.075": 1,
+      "0.100": 1,
+      "0.150": 1,
+      "0.200": 0,
+      "0.250": 0,
+      "0.300": 0
+    }
+  },
+  "samples_per_time": {
+    "train": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      2
+    ],
+    "validation": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0
+    ]
+  },
+  "time_diagnostics": {
+    "train": [
+      {
+        "time": 0.005,
+        "count": 3,
+        "target_norm_mean": 12.428448314017638,
+        "target_norm_std": 0.8235110797622308,
+        "time_bin_target_dispersion": 0.7041178679268449
+      },
+      {
+        "time": 0.01,
+        "count": 3,
+        "target_norm_mean": 11.925112370270663,
+        "target_norm_std": 3.702728020740502,
+        "time_bin_target_dispersion": 0.9056955479180078
+      },
+      {
+        "time": 0.02,
+        "count": 3,
+        "target_norm_mean": 6.39504956679567,
+        "target_norm_std": 5.0549409407862,
+        "time_bin_target_dispersion": 0.8230750392738634
+      },
+      {
+        "time": 0.035,
+        "count": 3,
+        "target_norm_mean": 7.194900054472072,
+        "target_norm_std": 2.8212776911872735,
+        "time_bin_target_dispersion": 0.9917483341027478
+      },
+      {
+        "time": 0.05,
+        "count": 3,
+        "target_norm_mean": 5.753356704116457,
+        "target_norm_std": 2.4000239143033277,
+        "time_bin_target_dispersion": 0.9863688633464671
+      },
+      {
+        "time": 0.075,
+        "count": 3,
+        "target_norm_mean": 4.904953604228928,
+        "target_norm_std": 1.2069600480298597,
+        "time_bin_target_dispersion": 0.7045982877255972
+      },
+      {
+        "time": 0.1,
+        "count": 3,
+        "target_norm_mean": 4.85110950967984,
+        "target_norm_std": 1.791089455412925,
+        "time_bin_target_dispersion": 0.7956694443055686
+      },
+      {
+        "time": 0.15,
+        "count": 3,
+        "target_norm_mean": 3.055598214671001,
+        "target_norm_std": 0.16486005891785224,
+        "time_bin_target_dispersion": 0.8399321499147574
+      },
+      {
+        "time": 0.2,
+        "count": 3,
+        "target_norm_mean": 2.456403412330058,
+        "target_norm_std": 0.04446913366384126,
+        "time_bin_target_dispersion": 0.8156984453742684
+      },
+      {
+        "time": 0.25,
+        "count": 3,
+        "target_norm_mean": 3.309955550200627,
+        "target_norm_std": 0.8979890638053496,
+        "time_bin_target_dispersion": 0.8867887335770063
+      },
+      {
+        "time": 0.3,
+        "count": 2,
+        "target_norm_mean": 2.6874338533046145,
+        "target_norm_std": 0.6844008279493501,
+        "time_bin_target_dispersion": 0.9408583179645696
+      }
+    ],
+    "validation": [
+      {
+        "time": 0.005,
+        "count": 1,
+        "target_norm_mean": 27.743963808158828,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.01,
+        "count": 1,
+        "target_norm_mean": 7.809756795215932,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.02,
+        "count": 1,
+        "target_norm_mean": 5.1760576541388446,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.035,
+        "count": 1,
+        "target_norm_mean": 7.93456505097952,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.05,
+        "count": 1,
+        "target_norm_mean": 7.315126969963225,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.075,
+        "count": 1,
+        "target_norm_mean": 3.4849703007840294,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.1,
+        "count": 1,
+        "target_norm_mean": 4.702303464053406,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.15,
+        "count": 1,
+        "target_norm_mean": 2.3159410202782293,
+        "target_norm_std": 0.0,
+        "time_bin_target_dispersion": 0.0
+      },
+      {
+        "time": 0.2,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.25,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      },
+      {
+        "time": 0.3,
+        "count": 0,
+        "target_norm_mean": null,
+        "target_norm_std": null,
+        "time_bin_target_dispersion": null
+      }
+    ]
+  },
+  "diagnostic_target_key": "skorokhod",
+  "time_bin_target_dispersion_definition": "Within each shared time bin: RMS(skorokhod - bin mean) / RMS(skorokhod).",
+  "device": "cpu",
+  "dtype": "float64"
+}

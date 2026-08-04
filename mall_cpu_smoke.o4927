@@ -1,0 +1,14 @@
+/home/r0700008/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py:1963: RuntimeWarning: missing heat density artifact: /home/r0700008/scoremodel/results/heat/generated_samples.pt; generating comparison with available teachers
+  warnings.warn(
+/home/r0700008/scoremodel/scripts/experiment_earthquake_teacher_compare_smoke.py:1963: RuntimeWarning: missing varadhan density artifact: /home/r0700008/scoremodel/results/varadhan/generated_samples.pt; generating comparison with available teachers
+  warnings.warn(
+/home/r0700008/scoremodel-venv/lib/python3.11/site-packages/cartopy/io/__init__.py:242: DownloadWarning: Downloading: https://naturalearth.s3.amazonaws.com/110m_physical/ne_110m_ocean.zip
+  warnings.warn(f'Downloading: {url}', DownloadWarning)
+/home/r0700008/scoremodel-venv/lib/python3.11/site-packages/cartopy/io/__init__.py:242: DownloadWarning: Downloading: https://naturalearth.s3.amazonaws.com/110m_physical/ne_110m_land.zip
+  warnings.warn(f'Downloading: {url}', DownloadWarning)
+[2026-08-04 16:36:45] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-04 16:36:45] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-04 16:36:45] time samples ready: mode=curated-lowt train=time_samples.pt validation=validation_time_samples.pt
+[2026-08-04 16:36:47] teacher=malliavin training_path=marginal_skorokhod
+[2026-08-04 16:36:47] final_train_loss=9.652889e-01 validation_loss=3.824553e+01
+[2026-08-04 16:36:47] mmd=3.843762e-02 geodesic_mean=8.203509e-01 norm_error=1.040834e-17

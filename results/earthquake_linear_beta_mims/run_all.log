@@ -1,0 +1,48 @@
+========================================
+EARTHQUAKE LINEAR BETA 3-TEACHER START
+DATE=Wed Aug  5 02:22:44 JST 2026
+HOST=mims-smp
+========================================
+===== heat START: Wed Aug  5 02:22:44 JST 2026 =====
+[2026-08-05 02:22:45] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-05 02:22:45] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-05 02:22:45] time samples ready: mode=uniform train=time_samples.pt validation=validation_time_samples.pt
+  epoch=  500  loss=7.890391e-02  best=8.227708e-02
+  epoch= 1000  loss=1.482415e-02  best=1.458548e-02
+  epoch= 1500  loss=5.787910e-03  best=5.765529e-03
+  epoch= 2000  loss=3.177808e-03  best=3.177415e-03
+  epoch= 2500  loss=2.370768e-03  best=2.408955e-03
+  epoch= 3000  loss=2.220487e-03  best=2.280570e-03
+[2026-08-05 02:32:38] teacher=heat training_path=direct_score
+[2026-08-05 02:32:38] final_train_loss=2.280610e-03 validation_loss=4.329098e+01
+[2026-08-05 02:32:38] mmd=2.785226e-03 geodesic_mean=1.121840e-01 norm_error=6.478108e-18
+===== heat END: Wed Aug  5 02:32:39 JST 2026 =====
+===== varadhan START: Wed Aug  5 02:32:39 JST 2026 =====
+[2026-08-05 02:32:40] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-05 02:32:40] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-05 02:32:40] time samples ready: mode=uniform train=time_samples.pt validation=validation_time_samples.pt
+  epoch=  500  loss=7.943321e-02  best=1.153885e-01
+  epoch= 1000  loss=1.490158e-02  best=1.413468e-02
+  epoch= 1500  loss=5.621852e-03  best=5.634127e-03
+  epoch= 2000  loss=3.494176e-03  best=3.471339e-03
+  epoch= 2500  loss=2.844232e-03  best=2.861321e-03
+  epoch= 3000  loss=2.699487e-03  best=2.739939e-03
+[2026-08-05 02:42:35] teacher=varadhan training_path=direct_score
+[2026-08-05 02:42:35] final_train_loss=2.739939e-03 validation_loss=2.589968e+02
+[2026-08-05 02:42:35] mmd=4.579608e-03 geodesic_mean=1.146396e-01 norm_error=5.258381e-18
+===== varadhan END: Wed Aug  5 02:42:35 JST 2026 =====
+===== malliavin START: Wed Aug  5 02:42:35 JST 2026 =====
+[2026-08-05 02:42:37] loading earthquake points from upstream/riemannian-score-sde/data/quakes_all.csv
+[2026-08-05 02:42:37] split indices ready: train_indices.pt, validation_indices.pt
+[2026-08-05 02:42:37] time samples ready: mode=uniform train=time_samples.pt validation=validation_time_samples.pt
+  epoch=  500  loss=1.257645e-01  best=1.140800e-01
+  epoch= 1000  loss=1.957415e-02  best=1.697267e-02
+  epoch= 1500  loss=8.043049e-03  best=7.975902e-03
+  epoch= 2000  loss=6.011521e-03  best=5.877806e-03
+  epoch= 2500  loss=5.095922e-03  best=5.218817e-03
+  epoch= 3000  loss=5.279710e-03  best=5.098175e-03
+[2026-08-05 02:55:09] teacher=malliavin training_path=marginal_skorokhod
+[2026-08-05 02:55:09] final_train_loss=5.098175e-03 validation_loss=2.371949e+02
+[2026-08-05 02:55:09] mmd=2.414161e-03 geodesic_mean=1.179844e-01 norm_error=5.664956e-18
+===== malliavin END: Wed Aug  5 02:56:33 JST 2026 =====
+ALL DONE: Wed Aug  5 02:56:33 JST 2026

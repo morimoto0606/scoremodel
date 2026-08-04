@@ -1,0 +1,83 @@
+python: 3.11.13 (main, Aug  4 2026, 16:11:16) [GCC 8.5.0 20210514 (Red Hat 8.5.0-4)]
+torch: 2.13.0+cpu
+cuda: False
+threads: 24
+scoremodel_ext: /home/r0700008/scoremodel/src/scoremodel_ext/__init__.py
+usage: experiment_earthquake_teacher_compare_smoke.py [-h]
+                                                      [--teacher {heat,varadhan,malliavin}]
+                                                      --output-dir OUTPUT_DIR
+                                                      [--data-path DATA_PATH]
+                                                      [--train-size TRAIN_SIZE]
+                                                      [--validation-size VALIDATION_SIZE]
+                                                      [--n-steps N_STEPS]
+                                                      [--minimum-time MINIMUM_TIME]
+                                                      [--maximum-time MAXIMUM_TIME]
+                                                      [--time-sampling {uniform,curated-lowt}]
+                                                      [--time-samples-path TIME_SAMPLES_PATH]
+                                                      [--validation-time-samples-path VALIDATION_TIME_SAMPLES_PATH]
+                                                      [--epochs EPOCHS]
+                                                      [--batch-size BATCH_SIZE]
+                                                      [--learning-rate LEARNING_RATE]
+                                                      [--weight-decay WEIGHT_DECAY]
+                                                      [--hidden HIDDEN]
+                                                      [--n-blocks N_BLOCKS]
+                                                      [--num-frequencies NUM_FREQUENCIES]
+                                                      [--seed SEED]
+                                                      [--split-seed SPLIT_SEED]
+                                                      [--reverse-seed REVERSE_SEED]
+                                                      [--reverse-steps REVERSE_STEPS]
+                                                      [--n-generated-samples N_GENERATED_SAMPLES]
+                                                      [--device DEVICE]
+                                                      [--dtype {float32,float64}]
+                                                      [--split-indices-path SPLIT_INDICES_PATH]
+                                                      [--terminal-samples-path TERMINAL_SAMPLES_PATH]
+                                                      [--reverse-noise-path REVERSE_NOISE_PATH]
+                                                      [--skip-teacher-generation]
+                                                      [--skip-training]
+                                                      [--model-path MODEL_PATH]
+                                                      [--replay-original-reverse-artifacts]
+                                                      [--covariance-regularization COVARIANCE_REGULARIZATION]
+                                                      [--heat-terms HEAT_TERMS]
+                                                      [--viz-output-dir VIZ_OUTPUT_DIR]
+                                                      [--skip-viz]
+
+Earthquake smoke runner with fixed-condition teacher comparison on S2.
+
+options:
+  -h, --help            show this help message and exit
+  --teacher {heat,varadhan,malliavin}
+  --output-dir OUTPUT_DIR
+  --data-path DATA_PATH
+  --train-size TRAIN_SIZE
+  --validation-size VALIDATION_SIZE
+  --n-steps N_STEPS
+  --minimum-time MINIMUM_TIME
+  --maximum-time MAXIMUM_TIME
+  --time-sampling {uniform,curated-lowt}
+  --time-samples-path TIME_SAMPLES_PATH
+  --validation-time-samples-path VALIDATION_TIME_SAMPLES_PATH
+  --epochs EPOCHS
+  --batch-size BATCH_SIZE
+  --learning-rate LEARNING_RATE
+  --weight-decay WEIGHT_DECAY
+  --hidden HIDDEN
+  --n-blocks N_BLOCKS
+  --num-frequencies NUM_FREQUENCIES
+  --seed SEED
+  --split-seed SPLIT_SEED
+  --reverse-seed REVERSE_SEED
+  --reverse-steps REVERSE_STEPS
+  --n-generated-samples N_GENERATED_SAMPLES
+  --device DEVICE
+  --dtype {float32,float64}
+  --split-indices-path SPLIT_INDICES_PATH
+  --terminal-samples-path TERMINAL_SAMPLES_PATH
+  --reverse-noise-path REVERSE_NOISE_PATH
+  --skip-teacher-generation
+  --skip-training
+  --model-path MODEL_PATH
+  --replay-original-reverse-artifacts
+  --covariance-regularization COVARIANCE_REGULARIZATION
+  --heat-terms HEAT_TERMS
+  --viz-output-dir VIZ_OUTPUT_DIR
+  --skip-viz
