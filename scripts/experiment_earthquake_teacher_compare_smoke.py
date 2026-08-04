@@ -34,6 +34,7 @@ from scoremodel_ext.manifold.s2_malliavin import (
     s2_reverse_grw,
     s2_varadhan_score,
 )
+from scoremodel_ext.manifold.beta_schedule import LinearBetaSchedule
 
 
 MAX_REVERSE_NOISE_STEPS = 1000
@@ -78,6 +79,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--minimum-time", type=float, default=0.05)
     parser.add_argument("--maximum-time", type=float, default=0.3)
+    parser.add_argument(
+        "--beta-schedule",
+        choices=("legacy-unit", "linear"),
+        default="legacy-unit",
+    )
+    parser.add_argument("--beta-0", type=float, default=0.001)
+    parser.add_argument("--beta-f", type=float, default=5.0)
+    parser.add_argument("--beta-t0", type=float, default=0.0)
+    parser.add_argument("--beta-tf", type=float, default=1.0)
     parser.add_argument(
         "--time-sampling",
         choices=("uniform", "curated-lowt"),
@@ -177,6 +187,89 @@ def resolve_device(name: str) -> str:
     if name == "cuda" and not torch.cuda.is_available():
         return "cpu"
     return name
+
+
+def build_beta_schedule(
+    name: str,
+    *,
+    beta_0: float,
+    beta_f: float,
+    beta_t0: float,
+    beta_tf: float,
+) -> LinearBetaSchedule | None:
+    """Build the optional schedule; ``None`` is the exact legacy code path."""
+
+    if name == "legacy-unit":
+        return None
+    if name != "linear":
+        raise ValueError(f"unknown beta schedule: {name!r}")
+    return LinearBetaSchedule(
+        beta_0=beta_0,
+        beta_f=beta_f,
+        t0=beta_t0,
+        tf=beta_tf,
+    )
+
+
+def beta_schedule_from_args(args: argparse.Namespace) -> LinearBetaSchedule | None:
+    return build_beta_schedule(
+        getattr(args, "beta_schedule", "legacy-unit"),
+        beta_0=getattr(args, "beta_0", 0.001),
+        beta_f=getattr(args, "beta_f", 5.0),
+        beta_t0=getattr(args, "beta_t0", 0.0),
+        beta_tf=getattr(args, "beta_tf", 1.0),
+    )
+
+
+def beta_schedule_from_run_config(
+    run_config: Dict[str, object],
+) -> LinearBetaSchedule | None:
+    """Restore a schedule, treating pre-schedule runs as exact legacy runs."""
+
+    return build_beta_schedule(
+        str(run_config.get("beta_schedule", "legacy-unit")),
+        beta_0=float(run_config.get("beta_0", 0.001)),
+        beta_f=float(run_config.get("beta_f", 5.0)),
+        beta_t0=float(run_config.get("beta_t0", 0.0)),
+        beta_tf=float(run_config.get("beta_tf", 1.0)),
+    )
+
+
+def validate_beta_schedule_time_range(
+    beta_schedule: LinearBetaSchedule | None,
+    *,
+    minimum_time: float,
+    maximum_time: float,
+) -> None:
+    if beta_schedule is None:
+        return
+    if minimum_time < beta_schedule.t0 or maximum_time > beta_schedule.tf:
+        raise ValueError(
+            "physical time range must lie within the linear beta schedule "
+            f"[{beta_schedule.t0}, {beta_schedule.tf}]"
+        )
+    if beta_schedule.rescale_t(minimum_time) <= 0.0:
+        raise ValueError("minimum physical time must have positive Brownian time")
+
+
+def beta_schedule_metadata(
+    beta_schedule: LinearBetaSchedule | None,
+) -> Dict[str, object]:
+    if beta_schedule is None:
+        return {
+            "beta_schedule": "legacy-unit",
+            "beta_0": 0.001,
+            "beta_f": 5.0,
+            "beta_t0": 0.0,
+            "beta_tf": 1.0,
+        }
+    return {
+        "beta_schedule": "linear",
+        "beta_0": beta_schedule.beta_0,
+        "beta_f": beta_schedule.beta_f,
+        "beta_t0": beta_schedule.t0,
+        "beta_tf": beta_schedule.tf,
+    }
 
 
 def normalize(points: torch.Tensor) -> torch.Tensor:
@@ -1170,12 +1263,16 @@ def build_malliavin_teacher_dataset_batched(
     noises: torch.Tensor,
     batch_size: int,
     covariance_regularization: float,
+    beta_schedule: LinearBetaSchedule | None = None,
 ) -> tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], list[int]]:
     """Build the ordinary dataset with exact sample-batched teacher chunks."""
 
+    brownian_times = (
+        times if beta_schedule is None else beta_schedule.rescale_t(times)
+    )
     chunks, effective_batch_sizes = compute_batched_malliavin_teacher_chunks(
         initial_points=initial_points,
-        times=times,
+        times=brownian_times,
         noises=noises,
         batch_size=batch_size,
         covariance_regularization=covariance_regularization,
@@ -1301,6 +1398,7 @@ def build_malliavin_teacher_shard(
     covariance_regularization: float,
     teacher_implementation: str = "scalar",
     teacher_batch_size: int = 4,
+    beta_schedule: LinearBetaSchedule | None = None,
 ) -> Dict[str, object]:
     """Run one Malliavin implementation over a global shard index range."""
 
@@ -1327,6 +1425,7 @@ def build_malliavin_teacher_shard(
                 noises=noises[start:end],
                 batch_size=teacher_batch_size,
                 covariance_regularization=covariance_regularization,
+                beta_schedule=beta_schedule,
             )
         )
         dataset = {key: value.detach().cpu() for key, value in dataset.items()}
@@ -1349,10 +1448,15 @@ def build_malliavin_teacher_shard(
             initial_point = initial_points[global_index]
             terminal_time = times[global_index]
             noise = noises[global_index]
+            brownian_time = (
+                terminal_time
+                if beta_schedule is None
+                else beta_schedule.rescale_t(terminal_time)
+            )
             teacher_state = s2_discrete_malliavin_teacher(
                 initial_point,
                 noise,
-                float(terminal_time.detach().cpu()),
+                float(brownian_time.detach().cpu()),
                 covariance_regularization=covariance_regularization,
                 vectorize_jacobian=True,
             )
@@ -1391,6 +1495,7 @@ def build_malliavin_teacher_shard(
         "teacher_implementation": teacher_implementation,
         "requested_teacher_batch_size": teacher_batch_size,
         "effective_teacher_batch_sizes": effective_batch_sizes,
+        **beta_schedule_metadata(beta_schedule),
         "global_indices": torch.arange(start, end, dtype=torch.int64),
         "dataset": dataset,
         "teacher_details": teacher_details,
@@ -1407,6 +1512,12 @@ def run_teacher_dataset_shard(
 
     dtype = to_dtype(args.dtype)
     device = resolve_device(args.device)
+    beta_schedule = beta_schedule_from_args(args)
+    validate_beta_schedule_time_range(
+        beta_schedule,
+        minimum_time=getattr(args, "minimum_time", 0.05),
+        maximum_time=getattr(args, "maximum_time", 0.3),
+    )
     initial_points, times, noises = load_saved_teacher_shard_inputs(
         initial_points_path=args.teacher_initial_points_path,
         train_times_path=args.time_samples_path,
@@ -1420,8 +1531,10 @@ def run_teacher_dataset_shard(
     )
     start = int(args.teacher_start_index)
     end = int(args.teacher_end_index)
+    teacher_implementation = getattr(args, "teacher_implementation", "scalar")
+    teacher_batch_size = getattr(args, "teacher_batch_size", 4)
     log(
-        f"generating {args.teacher_implementation} Malliavin teacher shard "
+        f"generating {teacher_implementation} Malliavin teacher shard "
         f"[{start}, {end}) on {device}"
     )
     started = time.perf_counter()
@@ -1434,9 +1547,15 @@ def run_teacher_dataset_shard(
         train_size=args.train_size,
         validation_size=args.validation_size,
         covariance_regularization=args.covariance_regularization,
-        teacher_implementation=args.teacher_implementation,
-        teacher_batch_size=args.teacher_batch_size,
+        teacher_implementation=teacher_implementation,
+        teacher_batch_size=teacher_batch_size,
+        beta_schedule=beta_schedule,
     )
+    payload["beta_schedule"] = getattr(args, "beta_schedule", "legacy-unit")
+    payload["beta_0"] = getattr(args, "beta_0", 0.001)
+    payload["beta_f"] = getattr(args, "beta_f", 5.0)
+    payload["beta_t0"] = getattr(args, "beta_t0", 0.0)
+    payload["beta_tf"] = getattr(args, "beta_tf", 1.0)
     payload["generation_seconds"] = time.perf_counter() - started
     shard_path = output_dir / f"teacher_dataset_shard_{start:06d}_{end:06d}.pt"
     torch.save(payload, shard_path)
@@ -1454,8 +1573,13 @@ def run_teacher_dataset_shard(
                 "n_steps": args.n_steps,
                 "dtype": args.dtype,
                 "device": device,
-                "teacher_implementation": args.teacher_implementation,
-                "requested_teacher_batch_size": args.teacher_batch_size,
+                "teacher_implementation": teacher_implementation,
+                "requested_teacher_batch_size": teacher_batch_size,
+                "beta_schedule": getattr(args, "beta_schedule", "legacy-unit"),
+                "beta_0": getattr(args, "beta_0", 0.001),
+                "beta_f": getattr(args, "beta_f", 5.0),
+                "beta_t0": getattr(args, "beta_t0", 0.0),
+                "beta_tf": getattr(args, "beta_tf", 1.0),
                 "effective_teacher_batch_sizes": payload[
                     "effective_teacher_batch_sizes"
                 ],
@@ -1480,6 +1604,7 @@ def build_teacher_dataset(
     teacher: str,
     covariance_regularization: float,
     heat_terms: int,
+    beta_schedule: LinearBetaSchedule | None = None,
 ) -> Dict[str, torch.Tensor]:
     endpoints = []
     score_target = []
@@ -1487,11 +1612,21 @@ def build_teacher_dataset(
 
     for initial_point, terminal_time, noise in zip(initial_points, times, noises):
         terminal_time_float = float(terminal_time.detach().cpu())
+        brownian_time = (
+            terminal_time
+            if beta_schedule is None
+            else beta_schedule.rescale_t(terminal_time)
+        )
+        brownian_time_float = (
+            terminal_time_float
+            if beta_schedule is None
+            else float(brownian_time.detach().cpu())
+        )
         if teacher == "malliavin":
             teacher_state = s2_discrete_malliavin_teacher(
                 initial_point,
                 noise,
-                terminal_time_float,
+                brownian_time_float,
                 covariance_regularization=covariance_regularization,
                 vectorize_jacobian=True,
             )
@@ -1499,20 +1634,22 @@ def build_teacher_dataset(
             score_target.append(teacher_state.score_weight)
             skorokhod.append(teacher_state.skorokhod)
         elif teacher == "heat":
-            endpoint = s2_grw_endpoint(initial_point, noise, terminal_time_float)
+            endpoint = s2_grw_endpoint(initial_point, noise, brownian_time_float)
             endpoints.append(endpoint)
             score_target.append(
                 s2_heat_kernel_score(
                     initial_point,
                     endpoint,
-                    terminal_time_float,
+                    brownian_time_float,
                     n_terms=heat_terms,
                 )
             )
         else:
-            endpoint = s2_grw_endpoint(initial_point, noise, terminal_time_float)
+            endpoint = s2_grw_endpoint(initial_point, noise, brownian_time_float)
             endpoints.append(endpoint)
-            score_target.append(s2_varadhan_score(initial_point, endpoint, terminal_time_float))
+            score_target.append(
+                s2_varadhan_score(initial_point, endpoint, brownian_time_float)
+            )
 
     dataset: Dict[str, torch.Tensor] = {
         "initial_point": initial_points,
@@ -1734,6 +1871,7 @@ def run_saved_model_evaluation(
     device = resolve_device(args.device)
     n_generated_samples = int(source_config["n_generated_samples"])
     reverse_steps = int(args.reverse_steps)
+    beta_schedule = beta_schedule_from_run_config(source_config)
 
     log(f"loading saved {teacher} model from {model_path}")
     checkpoint = torch.load(model_path, map_location="cpu")
@@ -1878,6 +2016,7 @@ def run_saved_model_evaluation(
         n_steps=reverse_steps,
         standard_noise=reverse_noise,
         minimum_forward_time=float(source_config["minimum_time"]),
+        beta_schedule=beta_schedule,
         return_first_step=args.replay_original_reverse_artifacts,
         debug_output_dir=(
             output_dir if args.replay_original_reverse_artifacts else None
@@ -1989,6 +2128,11 @@ def run_saved_model_evaluation(
         "ablation_validated_against_original_run": reproduction_passed,
         "device": device,
         "dtype": dtype_name,
+        "beta_schedule": str(source_config.get("beta_schedule", "legacy-unit")),
+        "beta_0": float(source_config.get("beta_0", 0.001)),
+        "beta_f": float(source_config.get("beta_f", 5.0)),
+        "beta_t0": float(source_config.get("beta_t0", 0.0)),
+        "beta_tf": float(source_config.get("beta_tf", 1.0)),
     }
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)
@@ -2011,6 +2155,13 @@ def run_saved_model_evaluation(
                 args.replay_original_reverse_artifacts
             ),
             "resolved_device": device,
+            "beta_schedule": str(
+                source_config.get("beta_schedule", "legacy-unit")
+            ),
+            "beta_0": float(source_config.get("beta_0", 0.001)),
+            "beta_f": float(source_config.get("beta_f", 5.0)),
+            "beta_t0": float(source_config.get("beta_t0", 0.0)),
+            "beta_tf": float(source_config.get("beta_tf", 1.0)),
         }
     )
     with (output_dir / "run_config.json").open("w", encoding="utf-8") as handle:
@@ -2065,6 +2216,12 @@ def main() -> None:
 
     dtype = to_dtype(args.dtype)
     device = resolve_device(args.device)
+    beta_schedule = beta_schedule_from_args(args)
+    validate_beta_schedule_time_range(
+        beta_schedule,
+        minimum_time=args.minimum_time,
+        maximum_time=args.maximum_time,
+    )
 
     if args.teacher != "heat":
         heat_dir = output_dir.parent / "heat"
@@ -2247,6 +2404,7 @@ def main() -> None:
                 noises=train_noises,
                 batch_size=args.teacher_batch_size,
                 covariance_regularization=args.covariance_regularization,
+                beta_schedule=beta_schedule,
             )
         )
         validation_dataset, _, validation_effective_teacher_batch_sizes = (
@@ -2256,6 +2414,7 @@ def main() -> None:
                 noises=validation_noises,
                 batch_size=args.teacher_batch_size,
                 covariance_regularization=args.covariance_regularization,
+                beta_schedule=beta_schedule,
             )
         )
     else:
@@ -2266,6 +2425,7 @@ def main() -> None:
             teacher=args.teacher,
             covariance_regularization=args.covariance_regularization,
             heat_terms=args.heat_terms,
+            beta_schedule=beta_schedule,
         )
         validation_dataset = build_teacher_dataset(
             initial_points=validation_initial,
@@ -2274,6 +2434,7 @@ def main() -> None:
             teacher=args.teacher,
             covariance_regularization=args.covariance_regularization,
             heat_terms=args.heat_terms,
+            beta_schedule=beta_schedule,
         )
         train_effective_teacher_batch_sizes = [1] * args.train_size
         validation_effective_teacher_batch_sizes = [1] * args.validation_size
@@ -2342,6 +2503,7 @@ def main() -> None:
         n_steps=args.reverse_steps,
         standard_noise=reverse_noise,
         minimum_forward_time=args.minimum_time,
+        beta_schedule=beta_schedule,
     )
     reverse_sampling_seconds = time.perf_counter() - reverse_started
 
@@ -2358,6 +2520,11 @@ def main() -> None:
             "n_blocks": args.n_blocks,
             "num_frequencies": args.num_frequencies,
             "dtype": args.dtype,
+            "beta_schedule": args.beta_schedule,
+            "beta_0": args.beta_0,
+            "beta_f": args.beta_f,
+            "beta_t0": args.beta_t0,
+            "beta_tf": args.beta_tf,
         },
         output_dir / "model.pt",
     )
@@ -2427,6 +2594,11 @@ def main() -> None:
         ),
         "device": device,
         "dtype": args.dtype,
+        "beta_schedule": args.beta_schedule,
+        "beta_0": args.beta_0,
+        "beta_f": args.beta_f,
+        "beta_t0": args.beta_t0,
+        "beta_tf": args.beta_tf,
     }
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)

@@ -11,6 +11,18 @@ from typing import Dict, Sequence
 import torch
 
 
+def _schedule_metadata(shard: Dict[str, object]) -> Dict[str, object]:
+    """Normalize pre-schedule shard metadata to the legacy unit clock."""
+
+    return {
+        "beta_schedule": shard.get("beta_schedule", "legacy-unit"),
+        "beta_0": shard.get("beta_0", 0.001),
+        "beta_f": shard.get("beta_f", 5.0),
+        "beta_t0": shard.get("beta_t0", 0.0),
+        "beta_tf": shard.get("beta_tf", 1.0),
+    }
+
+
 def _load_shard(path: Path) -> Dict[str, object]:
     if not path.is_file():
         raise FileNotFoundError(f"missing teacher shard: {path}")
@@ -106,6 +118,11 @@ def combine_teacher_shards(
                     f"shard metadata mismatch for {field}: "
                     f"{reference['_path']} vs {shard['_path']}"
                 )
+        if _schedule_metadata(shard) != _schedule_metadata(reference):
+            raise ValueError(
+                "shard beta schedule metadata mismatch: "
+                f"{reference['_path']} vs {shard['_path']}"
+            )
 
     if reference["format_version"] != 1:
         raise ValueError(f"unsupported shard format: {reference['format_version']}")
@@ -222,6 +239,7 @@ def combine_teacher_shards(
         "validation_size": validation_size,
         "dataset_keys": list(reference["dataset_keys"]),
         "detail_keys": list(reference["detail_keys"]),
+        **_schedule_metadata(reference),
         "shards": [
             {
                 "path": shard["_path"],

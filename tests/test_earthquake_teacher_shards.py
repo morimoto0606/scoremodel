@@ -10,6 +10,7 @@ from scoremodel_ext.manifold.s2_malliavin import (
     s2_batched_discrete_malliavin_teacher,
     s2_discrete_malliavin_teacher,
 )
+from scoremodel_ext.manifold.beta_schedule import LinearBetaSchedule
 
 
 DTYPE = torch.float64
@@ -191,6 +192,73 @@ def test_torch_func_batched_teacher_matches_scalar_cuda_float64_32_steps(
             initial_points[index],
             noises[index],
             float(times[index].detach().cpu()),
+            covariance_regularization=1e-6,
+        )
+        for key in REQUIRED_DETAIL_KEYS:
+            candidate = details[key][index]
+            reference = getattr(scalar, key)
+            max_abs_error = float(
+                torch.max(torch.abs(candidate - reference)).detach().cpu()
+            )
+            assert max_abs_error <= 1e-12, (
+                batch_size,
+                index,
+                key,
+                max_abs_error,
+            )
+            torch.testing.assert_close(
+                candidate,
+                reference,
+                rtol=0.0,
+                atol=1e-12,
+            )
+
+
+@pytest.mark.parametrize("batch_size", [4, 16])
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is unavailable")
+def test_linear_schedule_batched_teacher_matches_scalar_cuda_float64_32_steps(
+    batch_size,
+):
+    device = "cuda"
+    schedule = LinearBetaSchedule(
+        beta_0=0.001,
+        beta_f=5.0,
+        t0=0.0,
+        tf=1.0,
+    )
+    generator = torch.Generator(device=device).manual_seed(1618)
+    initial_points = torch.randn(
+        4, 3, generator=generator, dtype=DTYPE, device=device
+    )
+    initial_points = initial_points / torch.linalg.vector_norm(
+        initial_points, dim=1, keepdim=True
+    )
+    noises = torch.randn(
+        4, 32, 3, generator=generator, dtype=DTYPE, device=device
+    )
+    physical_times = torch.tensor(
+        [0.05, 0.1, 0.2, 0.3], dtype=DTYPE, device=device
+    )
+    brownian_times = schedule.rescale_t(physical_times)
+
+    dataset, details, effective_batch_sizes = (
+        runner.build_malliavin_teacher_dataset_batched(
+            initial_points=initial_points,
+            times=physical_times,
+            noises=noises,
+            batch_size=batch_size,
+            covariance_regularization=1e-6,
+            beta_schedule=schedule,
+        )
+    )
+
+    assert effective_batch_sizes == [4]
+    torch.testing.assert_close(dataset["time"], physical_times, rtol=0, atol=0)
+    for index in range(4):
+        scalar = s2_discrete_malliavin_teacher(
+            initial_points[index],
+            noises[index],
+            float(brownian_times[index].detach().cpu()),
             covariance_regularization=1e-6,
         )
         for key in REQUIRED_DETAIL_KEYS:

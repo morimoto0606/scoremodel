@@ -21,6 +21,7 @@ from .malliavin_teacher import (
     discrete_malliavin_skorokhod_teacher,
     tangent_malliavin_skorokhod_teacher,
 )
+from .beta_schedule import LegacyUnitBetaSchedule, LinearBetaSchedule
 
 
 Tensor = torch.Tensor
@@ -423,6 +424,7 @@ def s2_reverse_grw(
     minimum_forward_time: float = 1e-3,
     return_first_step: bool = False,
     debug_output_dir: str | Path | None = None,
+    beta_schedule: LegacyUnitBetaSchedule | LinearBetaSchedule | None = None,
 ) -> Tensor | Tuple[Tensor, Tensor]:
     r"""De Bortoli reverse GRW for a Brownian forward process on ``S2``.
 
@@ -448,7 +450,49 @@ def s2_reverse_grw(
     debug_output_dir:
         Optional directory for step-0/step-1 intermediate tensors. Debugging is
         opt-in; leaving this unset preserves the ordinary numerical path.
+    beta_schedule:
+        Optional physical-time Brownian beta schedule. ``None`` and
+        :class:`LegacyUnitBetaSchedule` use the unchanged legacy numerical
+        path. A linear schedule uses exact interval Brownian times while the
+        score network continues to receive physical time.
     """
+
+    if beta_schedule is None or isinstance(beta_schedule, LegacyUnitBetaSchedule):
+        return _s2_reverse_grw_legacy(
+            terminal_points,
+            score_fn,
+            terminal_time=terminal_time,
+            n_steps=n_steps,
+            standard_noise=standard_noise,
+            minimum_forward_time=minimum_forward_time,
+            return_first_step=return_first_step,
+            debug_output_dir=debug_output_dir,
+        )
+    return _s2_reverse_grw_linear_schedule(
+        terminal_points,
+        score_fn,
+        terminal_time=terminal_time,
+        n_steps=n_steps,
+        standard_noise=standard_noise,
+        minimum_forward_time=minimum_forward_time,
+        return_first_step=return_first_step,
+        debug_output_dir=debug_output_dir,
+        beta_schedule=beta_schedule,
+    )
+
+
+def _s2_reverse_grw_legacy(
+    terminal_points: Tensor,
+    score_fn,
+    *,
+    terminal_time: float,
+    n_steps: int,
+    standard_noise: Tensor | None,
+    minimum_forward_time: float,
+    return_first_step: bool,
+    debug_output_dir: str | Path | None,
+) -> Tensor | Tuple[Tensor, Tensor]:
+    """Original beta=1 reverse implementation, kept numerically unchanged."""
 
     if terminal_points.ndim != 2 or terminal_points.shape[1] != 3:
         raise ValueError("terminal_points must have shape [batch, 3]")
@@ -509,6 +553,106 @@ def s2_reverse_grw(
                     "projected_noise": projected_noise.detach().cpu(),
                     "dt": torch.tensor(dt, dtype=points.dtype),
                     "sqrt_dt": torch.tensor(sqrt_dt, dtype=points.dtype),
+                    "tangent_increment": tangent_increment.detach().cpu(),
+                    "output_points": points.detach().cpu(),
+                },
+                debug_dir / f"reverse_debug_step_{step:03d}.pt",
+            )
+        if return_first_step and step == 0:
+            first_step_points = points.clone()
+    if return_first_step:
+        assert first_step_points is not None
+        return points, first_step_points
+    return points
+
+
+def _s2_reverse_grw_linear_schedule(
+    terminal_points: Tensor,
+    score_fn,
+    *,
+    terminal_time: float,
+    n_steps: int,
+    standard_noise: Tensor | None,
+    minimum_forward_time: float,
+    return_first_step: bool,
+    debug_output_dir: str | Path | None,
+    beta_schedule: LinearBetaSchedule,
+) -> Tensor | Tuple[Tensor, Tensor]:
+    """Reverse GRW using exact Brownian time over each physical interval."""
+
+    if terminal_points.ndim != 2 or terminal_points.shape[1] != 3:
+        raise ValueError("terminal_points must have shape [batch, 3]")
+    if terminal_time <= beta_schedule.t0 or n_steps < 1:
+        raise ValueError(
+            "terminal_time must exceed beta schedule t0 and n_steps must be positive"
+        )
+    if terminal_time > beta_schedule.tf:
+        raise ValueError("terminal_time must not exceed beta schedule tf")
+
+    points = terminal_points / torch.linalg.vector_norm(
+        terminal_points, dim=1, keepdim=True
+    )
+    if standard_noise is None:
+        standard_noise = torch.randn(
+            n_steps,
+            points.shape[0],
+            3,
+            dtype=points.dtype,
+            device=points.device,
+        )
+    expected_shape = (n_steps, points.shape[0], 3)
+    if standard_noise.shape != expected_shape:
+        raise ValueError(f"standard_noise must have shape {expected_shape}")
+
+    dt = (terminal_time - beta_schedule.t0) / n_steps
+    debug_dir = Path(debug_output_dir) if debug_output_dir is not None else None
+    if debug_dir is not None:
+        debug_dir.mkdir(parents=True, exist_ok=True)
+    first_step_points = None
+    for step in range(n_steps):
+        input_points = points
+        physical_time = terminal_time - step * dt
+        next_physical_time = terminal_time - (step + 1) * dt
+        forward_time = max(physical_time, minimum_forward_time)
+        time_batch = torch.full(
+            (points.shape[0],),
+            forward_time,
+            dtype=points.dtype,
+            device=points.device,
+        )
+        raw_score = score_fn(time_batch, points)
+        projector = _batched_s2_projector(points)
+        projected_score = torch.einsum("bij,bj->bi", projector, raw_score)
+        raw_noise = standard_noise[step]
+        projected_noise = torch.einsum(
+            "bij,bj->bi", projector, standard_noise[step]
+        )
+        delta_tau = beta_schedule.interval_brownian_time(
+            next_physical_time,
+            physical_time,
+        )
+        if delta_tau <= 0.0:
+            raise ValueError("beta schedule produced non-positive Brownian time")
+        sqrt_delta_tau = math.sqrt(delta_tau)
+        tangent_increment = (
+            delta_tau * projected_score + sqrt_delta_tau * projected_noise
+        )
+        points = torch.stack(
+            [s2_exp(point, increment) for point, increment in zip(points, tangent_increment)]
+        )
+        if debug_dir is not None and step < 2:
+            torch.save(
+                {
+                    "input_points": input_points.detach().cpu(),
+                    "forward_time": torch.tensor(forward_time, dtype=points.dtype),
+                    "time_batch": time_batch.detach().cpu(),
+                    "raw_score": raw_score.detach().cpu(),
+                    "projector": projector.detach().cpu(),
+                    "projected_score": projected_score.detach().cpu(),
+                    "raw_noise": raw_noise.detach().cpu(),
+                    "projected_noise": projected_noise.detach().cpu(),
+                    "dt": torch.tensor(dt, dtype=points.dtype),
+                    "sqrt_dt": torch.tensor(sqrt_delta_tau, dtype=points.dtype),
                     "tangent_increment": tangent_increment.detach().cpu(),
                     "output_points": points.detach().cpu(),
                 },
