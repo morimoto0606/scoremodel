@@ -1,0 +1,869 @@
+{
+  "teacher": "heat",
+  "model_path": "/home/export/home/ymorimoto/github/scoremodel/results/earthquake_lowt_heat/model.pt",
+  "checkpoint_prefix": "",
+  "stages": [
+    {
+      "stage": "1_constructor_immediately_after",
+      "all_normalization_buffers_exact": false,
+      "buffers": {
+        "x_mean": {
+          "checkpoint_key": "x_mean",
+          "checkpoint_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "current_value": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.3090996575300757,
+          "exact_equal": false
+        },
+        "x_std": {
+          "checkpoint_key": "x_std",
+          "checkpoint_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "current_value": [
+            [
+              1.0,
+              1.0,
+              1.0
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.5615027822783024,
+          "exact_equal": false
+        },
+        "t_mean": {
+          "checkpoint_key": "t_mean",
+          "checkpoint_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "current_value": [
+            [
+              0.0
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.15429376983054666,
+          "exact_equal": false
+        },
+        "t_std": {
+          "checkpoint_key": "t_std",
+          "checkpoint_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "current_value": [
+            [
+              1.0
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.9126936924512921,
+          "exact_equal": false
+        },
+        "y_mean": {
+          "checkpoint_key": "y_mean",
+          "checkpoint_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "current_value": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.5936366486131319,
+          "exact_equal": false
+        },
+        "y_std": {
+          "checkpoint_key": "y_std",
+          "checkpoint_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "current_value": [
+            [
+              1.0,
+              1.0,
+              1.0
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 2.157828810780095,
+          "exact_equal": false
+        }
+      }
+    },
+    {
+      "stage": "2_load_state_dict_immediately_after",
+      "all_normalization_buffers_exact": true,
+      "buffers": {
+        "x_mean": {
+          "checkpoint_key": "x_mean",
+          "checkpoint_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "current_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "x_std": {
+          "checkpoint_key": "x_std",
+          "checkpoint_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "current_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_mean": {
+          "checkpoint_key": "t_mean",
+          "checkpoint_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "current_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_std": {
+          "checkpoint_key": "t_std",
+          "checkpoint_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "current_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_mean": {
+          "checkpoint_key": "y_mean",
+          "checkpoint_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "current_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_std": {
+          "checkpoint_key": "y_std",
+          "checkpoint_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "current_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        }
+      }
+    },
+    {
+      "stage": "3_wrapper_immediately_after",
+      "all_normalization_buffers_exact": true,
+      "buffers": {
+        "x_mean": {
+          "checkpoint_key": "x_mean",
+          "checkpoint_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "current_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "x_std": {
+          "checkpoint_key": "x_std",
+          "checkpoint_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "current_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_mean": {
+          "checkpoint_key": "t_mean",
+          "checkpoint_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "current_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_std": {
+          "checkpoint_key": "t_std",
+          "checkpoint_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "current_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_mean": {
+          "checkpoint_key": "y_mean",
+          "checkpoint_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "current_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_std": {
+          "checkpoint_key": "y_std",
+          "checkpoint_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "current_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        }
+      }
+    },
+    {
+      "stage": "4_fixed_input_evaluation_immediately_before",
+      "all_normalization_buffers_exact": true,
+      "buffers": {
+        "x_mean": {
+          "checkpoint_key": "x_mean",
+          "checkpoint_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "current_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "x_std": {
+          "checkpoint_key": "x_std",
+          "checkpoint_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "current_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_mean": {
+          "checkpoint_key": "t_mean",
+          "checkpoint_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "current_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_std": {
+          "checkpoint_key": "t_std",
+          "checkpoint_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "current_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_mean": {
+          "checkpoint_key": "y_mean",
+          "checkpoint_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "current_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_std": {
+          "checkpoint_key": "y_std",
+          "checkpoint_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "current_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        }
+      }
+    },
+    {
+      "stage": "5_reverse_sampling_immediately_before",
+      "all_normalization_buffers_exact": true,
+      "buffers": {
+        "x_mean": {
+          "checkpoint_key": "x_mean",
+          "checkpoint_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "current_value": [
+            [
+              0.05214431332521588,
+              0.17768241251070477,
+              0.3090996575300757
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "x_std": {
+          "checkpoint_key": "x_std",
+          "checkpoint_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "current_value": [
+            [
+              0.5555022245528437,
+              0.6080541876448625,
+              0.4384972177216976
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_mean": {
+          "checkpoint_key": "t_mean",
+          "checkpoint_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "current_value": [
+            [
+              0.15429376983054666
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "t_std": {
+          "checkpoint_key": "t_std",
+          "checkpoint_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "current_value": [
+            [
+              0.087306307548708
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            1
+          ],
+          "current_shape": [
+            1,
+            1
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_mean": {
+          "checkpoint_key": "y_mean",
+          "checkpoint_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "current_value": [
+            [
+              -0.02476465107522649,
+              0.37991025729311906,
+              0.5936366486131319
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        },
+        "y_std": {
+          "checkpoint_key": "y_std",
+          "checkpoint_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "current_value": [
+            [
+              3.0536771892889494,
+              3.008741279937276,
+              3.157828810780095
+            ]
+          ],
+          "checkpoint_shape": [
+            1,
+            3
+          ],
+          "current_shape": [
+            1,
+            3
+          ],
+          "checkpoint_dtype": "torch.float64",
+          "current_dtype": "torch.float64",
+          "max_abs_error": 0.0,
+          "exact_equal": true
+        }
+      }
+    }
+  ],
+  "first_stage_not_matching_checkpoint": "1_constructor_immediately_after",
+  "first_post_load_mismatch_stage": null
+}
