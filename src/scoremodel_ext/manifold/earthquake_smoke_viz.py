@@ -222,6 +222,94 @@ def generate_earthquake_density_plots(
     }
 
 
+def generate_earthquake_density_comparison(
+    *,
+    observed_points: torch.Tensor | np.ndarray,
+    generated_by_teacher: Mapping[str, torch.Tensor | np.ndarray],
+    output_path: Path,
+    grid_size: int = 400,
+    kappa: float = 80.0,
+    view_lon: float = 70.0,
+    view_lat: float = 30.0,
+    save_pdf: bool = True,
+) -> dict:
+    """Save only the fixed four-panel density comparison."""
+
+    missing = [
+        teacher
+        for teacher in DENSITY_TEACHER_ORDER
+        if teacher not in generated_by_teacher
+    ]
+    if missing:
+        raise ValueError(f"missing generated samples for teachers: {missing}")
+
+    panels = {"observed": _to_numpy(observed_points)}
+    panels.update(
+        {
+            teacher: _to_numpy(generated_by_teacher[teacher])
+            for teacher in DENSITY_TEACHER_ORDER
+        }
+    )
+    densities: Dict[str, np.ndarray] = {}
+    lat = lon = None
+    for panel_name in SCATTER_PANEL_ORDER:
+        density, panel_lat, panel_lon = spherical_kde_density_on_grid(
+            panels[panel_name],
+            grid_size,
+            kappa,
+        )
+        densities[panel_name] = density
+        if lat is None:
+            lat, lon = panel_lat, panel_lon
+
+    titles = {
+        "observed": "Observed",
+        "heat": "Heat",
+        "varadhan": "Varadhan",
+        "malliavin": "Malliavin",
+    }
+    levels = np.linspace(0.0, 1.0, 220)
+    density_cmap = density_overlay_cmap()
+    projection = ccrs.Orthographic(view_lon, view_lat)
+    fig = plt.figure(figsize=(20, 5), dpi=300)
+    for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
+        ax = fig.add_subplot(
+            1,
+            4,
+            index,
+            projection=projection,
+            frameon=True,
+        )
+        add_earth_background(ax)
+        ax.contourf(
+            lon,
+            lat,
+            densities[panel_name],
+            levels=levels,
+            transform=ccrs.PlateCarree(),
+            antialiased=True,
+            cmap=density_cmap,
+            extend="both",
+            zorder=2,
+        )
+        ax.set_title(titles[panel_name])
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    pdf_path = output_path.with_suffix(".pdf") if save_pdf else None
+    if pdf_path is not None:
+        fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+    return {
+        "panel_order": SCATTER_PANEL_ORDER,
+        "n_columns": 4,
+        "output_path": output_path,
+        "pdf_path": pdf_path,
+    }
+
+
 def generate_earthquake_smoke_plots(
     *,
     observed_points: torch.Tensor | np.ndarray,

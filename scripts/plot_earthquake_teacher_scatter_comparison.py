@@ -11,6 +11,7 @@ import torch
 
 
 DEFAULT_PREFIX = "earthquake_linear_beta_100k_ema"
+DEFAULT_COMPARISON_DIR = Path(f"results/{DEFAULT_PREFIX}_comparison")
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(f"results/{DEFAULT_PREFIX}_scatter_comparison.png"),
+        default=DEFAULT_COMPARISON_DIR / "scatter_comparison.png",
     )
     parser.add_argument("--max-points", type=int, default=4096)
     parser.add_argument("--marker-size", type=float, default=1.0)
