@@ -43,3 +43,8 @@ upstream/ER-SDE-Solver
 results/**/*_trace.json
 results/**/scalar_trace.json
 results/**/batch_*_trace.json
+
+# PBS execution logs
+logs/
+*.o[0-9]*
+*.e[0-9]*
