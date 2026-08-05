@@ -46,6 +46,7 @@ def generate_earthquake_scatter_comparison(
     alpha: float = 0.65,
     view_lon: float = 70.0,
     view_lat: float = 30.0,
+    geographic_extent: tuple[float, float, float, float] | None = None,
     save_pdf: bool = True,
 ) -> dict:
     """Save one fixed-projection Observed/Heat/Varadhan/Malliavin scatter figure."""
@@ -87,7 +88,11 @@ def generate_earthquake_scatter_comparison(
         "varadhan": "Varadhan",
         "malliavin": "Malliavin",
     }
-    projection = ccrs.Orthographic(view_lon, view_lat)
+    projection = (
+        ccrs.Orthographic(view_lon, view_lat)
+        if geographic_extent is None
+        else ccrs.PlateCarree()
+    )
     fig = plt.figure(figsize=(20, 5), dpi=300)
     for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
         ax = fig.add_subplot(
@@ -98,6 +103,8 @@ def generate_earthquake_scatter_comparison(
             frameon=True,
         )
         add_earth_background(ax)
+        if geographic_extent is not None:
+            ax.set_extent(geographic_extent, crs=ccrs.PlateCarree())
         lat, lon = cartesian_to_latlon(displayed[panel_name])
         projected = ax.projection.transform_points(ccrs.Geodetic(), lon, lat)
         ax.scatter(
@@ -122,9 +129,59 @@ def generate_earthquake_scatter_comparison(
         "displayed_count_per_panel": displayed_count,
         "marker_size": marker_size,
         "alpha": alpha,
+        "geographic_extent": geographic_extent,
         "output_path": output_path,
         "pdf_path": pdf_path,
     }
+
+
+def generate_earthquake_malliavin_overlay(
+    *,
+    observed_points: torch.Tensor | np.ndarray,
+    malliavin_points: torch.Tensor | np.ndarray,
+    output_path: Path,
+    geographic_extent: tuple[float, float, float, float] = (120.0, 150.0, 20.0, 50.0),
+    max_points: int = 4096,
+    marker_size: float = 2.0,
+    alpha: float = 0.4,
+    save_pdf: bool = True,
+) -> dict:
+    """Overlay observed and Malliavin samples in a shared geographic window."""
+
+    observed = _stable_subsample(_to_numpy(observed_points), max_points)
+    malliavin = _stable_subsample(_to_numpy(malliavin_points), max_points)
+    projection = ccrs.PlateCarree()
+    fig = plt.figure(figsize=(7, 6), dpi=300)
+    ax = fig.add_subplot(1, 1, 1, projection=projection, frameon=True)
+    add_earth_background(ax)
+    ax.set_extent(geographic_extent, crs=ccrs.PlateCarree())
+
+    for points, label, color in (
+        (observed, "Observed", "#377eb8"),
+        (malliavin, "Malliavin", "#e41a1c"),
+    ):
+        lat, lon = cartesian_to_latlon(points)
+        ax.scatter(
+            lon,
+            lat,
+            transform=ccrs.PlateCarree(),
+            s=marker_size,
+            c=color,
+            alpha=alpha,
+            label=label,
+        )
+    ax.set_title("Observed + Malliavin (Japan Zoom)")
+    ax.legend(loc="lower left", markerscale=3.0)
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    pdf_path = output_path.with_suffix(".pdf") if save_pdf else None
+    if pdf_path is not None:
+        fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+    return {"output_path": output_path, "pdf_path": pdf_path}
 
 
 def generate_earthquake_density_plots(
@@ -307,6 +364,132 @@ def generate_earthquake_density_comparison(
         "n_columns": 4,
         "output_path": output_path,
         "pdf_path": pdf_path,
+    }
+
+
+def generate_earthquake_density_bandwidth_outputs(
+    *,
+    observed_points: torch.Tensor | np.ndarray,
+    generated_by_teacher: Mapping[str, torch.Tensor | np.ndarray],
+    global_output_path: Path,
+    bandwidth_comparison_path: Path,
+    grid_size: int = 400,
+    base_kappa: float = 80.0,
+    bandwidth_scale: float = 0.5,
+    view_lon: float = 70.0,
+    view_lat: float = 30.0,
+    save_pdf: bool = True,
+) -> dict:
+    """Save the sharper global density and current-vs-scaled bandwidth grid.
+
+    For the local von Mises--Fisher approximation, bandwidth is proportional
+    to ``1 / sqrt(kappa)``. Therefore a bandwidth scale ``q`` uses
+    ``scaled_kappa = base_kappa / q**2``.
+    """
+
+    if not 0.0 < bandwidth_scale <= 1.0:
+        raise ValueError("bandwidth_scale must lie in (0, 1]")
+    missing = [name for name in DENSITY_TEACHER_ORDER if name not in generated_by_teacher]
+    if missing:
+        raise ValueError(f"missing generated samples for teachers: {missing}")
+
+    panels = {"observed": _to_numpy(observed_points)}
+    panels.update(
+        {
+            teacher: _to_numpy(generated_by_teacher[teacher])
+            for teacher in DENSITY_TEACHER_ORDER
+        }
+    )
+    scaled_kappa = base_kappa / bandwidth_scale**2
+    density_sets: Dict[str, Dict[str, np.ndarray]] = {
+        "current": {},
+        "scaled": {},
+    }
+    lat = lon = None
+    for panel_name in SCATTER_PANEL_ORDER:
+        current, panel_lat, panel_lon = spherical_kde_density_on_grid(
+            panels[panel_name], grid_size, base_kappa
+        )
+        scaled, _, _ = spherical_kde_density_on_grid(
+            panels[panel_name], grid_size, scaled_kappa
+        )
+        density_sets["current"][panel_name] = current
+        density_sets["scaled"][panel_name] = scaled
+        if lat is None:
+            lat, lon = panel_lat, panel_lon
+
+    titles = {
+        "observed": "Observed",
+        "heat": "Heat",
+        "varadhan": "Varadhan",
+        "malliavin": "Malliavin",
+    }
+    levels = np.linspace(0.0, 1.0, 220)
+    density_cmap = density_overlay_cmap()
+    projection = ccrs.Orthographic(view_lon, view_lat)
+
+    def draw_panel(ax, density, title):
+        add_earth_background(ax)
+        ax.contourf(
+            lon,
+            lat,
+            density,
+            levels=levels,
+            transform=ccrs.PlateCarree(),
+            antialiased=True,
+            cmap=density_cmap,
+            extend="both",
+            zorder=2,
+        )
+        ax.set_title(title)
+
+    global_output_path = Path(global_output_path)
+    global_output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig = plt.figure(figsize=(20, 5), dpi=300)
+    for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
+        ax = fig.add_subplot(1, 4, index, projection=projection, frameon=True)
+        draw_panel(ax, density_sets["scaled"][panel_name], titles[panel_name])
+    fig.tight_layout()
+    fig.savefig(global_output_path, dpi=300, bbox_inches="tight")
+    global_pdf_path = global_output_path.with_suffix(".pdf") if save_pdf else None
+    if global_pdf_path is not None:
+        fig.savefig(global_pdf_path, bbox_inches="tight")
+    plt.close(fig)
+
+    bandwidth_comparison_path = Path(bandwidth_comparison_path)
+    fig = plt.figure(figsize=(20, 10), dpi=300)
+    for row, (set_name, row_title) in enumerate(
+        (("current", "Current bandwidth"), ("scaled", f"Bandwidth × {bandwidth_scale:g}"))
+    ):
+        for column, panel_name in enumerate(SCATTER_PANEL_ORDER):
+            ax = fig.add_subplot(
+                2,
+                4,
+                row * 4 + column + 1,
+                projection=projection,
+                frameon=True,
+            )
+            draw_panel(
+                ax,
+                density_sets[set_name][panel_name],
+                f"{titles[panel_name]} — {row_title}",
+            )
+    fig.tight_layout()
+    fig.savefig(bandwidth_comparison_path, dpi=300, bbox_inches="tight")
+    bandwidth_pdf_path = (
+        bandwidth_comparison_path.with_suffix(".pdf") if save_pdf else None
+    )
+    if bandwidth_pdf_path is not None:
+        fig.savefig(bandwidth_pdf_path, bbox_inches="tight")
+    plt.close(fig)
+    return {
+        "global_output_path": global_output_path,
+        "global_pdf_path": global_pdf_path,
+        "bandwidth_comparison_path": bandwidth_comparison_path,
+        "bandwidth_pdf_path": bandwidth_pdf_path,
+        "base_kappa": base_kappa,
+        "scaled_kappa": scaled_kappa,
+        "bandwidth_scale": bandwidth_scale,
     }
 
 

@@ -33,11 +33,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=DEFAULT_COMPARISON_DIR / "scatter_comparison.png",
+        default=DEFAULT_COMPARISON_DIR / "scatter_global.png",
     )
     parser.add_argument("--max-points", type=int, default=4096)
-    parser.add_argument("--marker-size", type=float, default=1.0)
-    parser.add_argument("--alpha", type=float, default=0.65)
+    parser.add_argument("--marker-size", type=float, default=2.0)
+    parser.add_argument("--alpha", type=float, default=0.4)
     parser.add_argument("--view-lon", type=float, default=70.0)
     parser.add_argument("--view-lat", type=float, default=30.0)
     parser.add_argument("--no-pdf", action="store_true")

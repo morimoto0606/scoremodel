@@ -40,10 +40,11 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_COMPARISON_DIR,
     )
     parser.add_argument("--max-scatter-points", type=int, default=4096)
-    parser.add_argument("--marker-size", type=float, default=1.0)
-    parser.add_argument("--alpha", type=float, default=0.65)
+    parser.add_argument("--marker-size", type=float, default=2.0)
+    parser.add_argument("--alpha", type=float, default=0.4)
     parser.add_argument("--grid-size", type=int, default=400)
     parser.add_argument("--kappa", type=float, default=80.0)
+    parser.add_argument("--density-bandwidth-scale", type=float, default=0.5)
     parser.add_argument("--view-lon", type=float, default=70.0)
     parser.add_argument("--view-lat", type=float, default=30.0)
     parser.add_argument("--no-pdf", action="store_true")
@@ -91,14 +92,15 @@ def main() -> None:
 
     # Plotting imports are delayed so metrics/artifact tests remain headless.
     from scoremodel_ext.manifold.earthquake_smoke_viz import (
-        generate_earthquake_density_comparison,
+        generate_earthquake_density_bandwidth_outputs,
+        generate_earthquake_malliavin_overlay,
         generate_earthquake_scatter_comparison,
     )
 
-    scatter = generate_earthquake_scatter_comparison(
+    scatter_global = generate_earthquake_scatter_comparison(
         observed_points=observed,
         generated_by_teacher=generated,
-        output_path=comparison_dir / "scatter_comparison.png",
+        output_path=comparison_dir / "scatter_global.png",
         max_points=args.max_scatter_points,
         marker_size=args.marker_size,
         alpha=args.alpha,
@@ -106,25 +108,51 @@ def main() -> None:
         view_lat=args.view_lat,
         save_pdf=not args.no_pdf,
     )
-    density = generate_earthquake_density_comparison(
+    scatter_japan = generate_earthquake_scatter_comparison(
         observed_points=observed,
         generated_by_teacher=generated,
-        output_path=comparison_dir / "density_comparison.png",
+        output_path=comparison_dir / "scatter_japan_zoom.png",
+        max_points=args.max_scatter_points,
+        marker_size=args.marker_size,
+        alpha=args.alpha,
+        geographic_extent=(120.0, 150.0, 20.0, 50.0),
+        save_pdf=not args.no_pdf,
+    )
+    density = generate_earthquake_density_bandwidth_outputs(
+        observed_points=observed,
+        generated_by_teacher=generated,
+        global_output_path=comparison_dir / "density_global.png",
+        bandwidth_comparison_path=comparison_dir / "density_bandwidth_comparison.png",
         grid_size=args.grid_size,
-        kappa=args.kappa,
+        base_kappa=args.kappa,
+        bandwidth_scale=args.density_bandwidth_scale,
         view_lon=args.view_lon,
         view_lat=args.view_lat,
+        save_pdf=not args.no_pdf,
+    )
+    overlay = generate_earthquake_malliavin_overlay(
+        observed_points=observed,
+        malliavin_points=generated["malliavin"],
+        output_path=comparison_dir / "malliavin_overlay_japan_zoom.png",
+        geographic_extent=(120.0, 150.0, 20.0, 50.0),
+        max_points=args.max_scatter_points,
+        marker_size=args.marker_size,
+        alpha=args.alpha,
         save_pdf=not args.no_pdf,
     )
     metrics_path = comparison_dir / "metrics_comparison.json"
     save_metrics_comparison(run_dirs, metrics_path)
 
-    print(f"saved {scatter['output_path']}")
-    if scatter["pdf_path"] is not None:
-        print(f"saved {scatter['pdf_path']}")
-    print(f"saved {density['output_path']}")
-    if density["pdf_path"] is not None:
-        print(f"saved {density['pdf_path']}")
+    for result in (scatter_global, scatter_japan, overlay):
+        print(f"saved {result['output_path']}")
+        if result["pdf_path"] is not None:
+            print(f"saved {result['pdf_path']}")
+    print(f"saved {density['global_output_path']}")
+    if density["global_pdf_path"] is not None:
+        print(f"saved {density['global_pdf_path']}")
+    print(f"saved {density['bandwidth_comparison_path']}")
+    if density["bandwidth_pdf_path"] is not None:
+        print(f"saved {density['bandwidth_pdf_path']}")
     print(f"saved {metrics_path}")
 
 
