@@ -12,6 +12,7 @@ import cartopy.crs as ccrs
 
 from scripts.reproduce_earthquake_s2_malliavin import (
     add_earth_background,
+    cartesian_to_latlon,
     density_overlay_cmap,
     plot_density_map,
     scatter_earthquake_points,
@@ -20,6 +21,7 @@ from scripts.reproduce_earthquake_s2_malliavin import (
 
 
 DENSITY_TEACHER_ORDER = ("heat", "varadhan", "malliavin")
+SCATTER_PANEL_ORDER = ("observed", *DENSITY_TEACHER_ORDER)
 
 
 def _to_numpy(points: torch.Tensor | np.ndarray) -> np.ndarray:
@@ -32,6 +34,97 @@ def _stable_subsample(points: np.ndarray, n: int) -> np.ndarray:
     if points.shape[0] <= n:
         return points
     return points[:n]
+
+
+def generate_earthquake_scatter_comparison(
+    *,
+    observed_points: torch.Tensor | np.ndarray,
+    generated_by_teacher: Mapping[str, torch.Tensor | np.ndarray],
+    output_path: Path,
+    max_points: int = 4096,
+    marker_size: float = 1.0,
+    alpha: float = 0.65,
+    view_lon: float = 70.0,
+    view_lat: float = 30.0,
+    save_pdf: bool = True,
+) -> dict:
+    """Save one fixed-projection Observed/Heat/Varadhan/Malliavin scatter figure."""
+
+    missing = [
+        teacher
+        for teacher in DENSITY_TEACHER_ORDER
+        if teacher not in generated_by_teacher
+    ]
+    if missing:
+        raise ValueError(f"missing generated samples for teachers: {missing}")
+    if max_points < 1:
+        raise ValueError("max_points must be positive")
+
+    panels = {"observed": _to_numpy(observed_points)}
+    panels.update(
+        {
+            teacher: _to_numpy(generated_by_teacher[teacher])
+            for teacher in DENSITY_TEACHER_ORDER
+        }
+    )
+    for name, points in panels.items():
+        if points.ndim != 2 or points.shape[1] != 3:
+            raise ValueError(f"{name} points must have shape (n, 3), got {points.shape}")
+        if not np.isfinite(points).all():
+            raise ValueError(f"{name} points contain non-finite values")
+
+    displayed_count = min(max_points, *(points.shape[0] for points in panels.values()))
+    if displayed_count < 1:
+        raise ValueError("all panels must contain at least one point")
+    displayed = {
+        name: _stable_subsample(points, displayed_count)
+        for name, points in panels.items()
+    }
+
+    titles = {
+        "observed": "Observed",
+        "heat": "Heat",
+        "varadhan": "Varadhan",
+        "malliavin": "Malliavin",
+    }
+    projection = ccrs.Orthographic(view_lon, view_lat)
+    fig = plt.figure(figsize=(20, 5), dpi=300)
+    for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
+        ax = fig.add_subplot(
+            1,
+            4,
+            index,
+            projection=projection,
+            frameon=True,
+        )
+        add_earth_background(ax)
+        lat, lon = cartesian_to_latlon(displayed[panel_name])
+        projected = ax.projection.transform_points(ccrs.Geodetic(), lon, lat)
+        ax.scatter(
+            projected[:, 0],
+            projected[:, 1],
+            s=marker_size,
+            c="#d95f02",
+            alpha=alpha,
+        )
+        ax.set_title(titles[panel_name])
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    pdf_path = output_path.with_suffix(".pdf") if save_pdf else None
+    if pdf_path is not None:
+        fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+    return {
+        "panel_order": SCATTER_PANEL_ORDER,
+        "displayed_count_per_panel": displayed_count,
+        "marker_size": marker_size,
+        "alpha": alpha,
+        "output_path": output_path,
+        "pdf_path": pdf_path,
+    }
 
 
 def generate_earthquake_density_plots(
