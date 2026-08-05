@@ -1,8 +1,12 @@
+import ast
+import importlib
 import json
 import sys
 from pathlib import Path
 
+import pytest
 import torch
+import scoremodel_ext
 
 from scripts.plot_earthquake_teacher_scatter_comparison import (
     parse_args,
@@ -79,3 +83,26 @@ def test_metrics_comparison_uses_final_train_loss_fallback(tmp_path):
     output_path = tmp_path / "comparison" / "metrics_comparison.json"
     saved = save_metrics_comparison(run_dirs, output_path)
     assert json.loads(output_path.read_text(encoding="utf-8")) == saved
+
+
+def test_scoremodel_ext_does_not_import_scripts_package():
+    package_root = Path(scoremodel_ext.__file__).resolve().parent
+    violations = []
+    for source_path in package_root.rglob("*.py"):
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.module == "scripts" or node.module.startswith("scripts."):
+                    violations.append(f"{source_path}:{node.lineno}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "scripts" or alias.name.startswith("scripts."):
+                        violations.append(f"{source_path}:{node.lineno}")
+    assert violations == []
+
+
+def test_earthquake_smoke_viz_imports_without_scripts_package():
+    pytest.importorskip("matplotlib.pyplot")
+    pytest.importorskip("cartopy.crs")
+    module = importlib.import_module("scoremodel_ext.manifold.earthquake_smoke_viz")
+    assert hasattr(module, "generate_earthquake_density_comparison")

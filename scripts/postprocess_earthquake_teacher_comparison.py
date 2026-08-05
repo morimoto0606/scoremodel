@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from scripts.plot_earthquake_teacher_scatter_comparison import (
+from scoremodel_ext.manifold.earthquake_comparison_artifacts import (
     DEFAULT_COMPARISON_DIR,
     DEFAULT_PREFIX,
     load_saved_scatter_artifacts,

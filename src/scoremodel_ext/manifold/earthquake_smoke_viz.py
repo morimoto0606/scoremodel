@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import cartopy.crs as ccrs
 
-from scripts.reproduce_earthquake_s2_malliavin import (
+from .earthquake_viz_utils import (
     add_earth_background,
     cartesian_to_latlon,
     density_overlay_cmap,
