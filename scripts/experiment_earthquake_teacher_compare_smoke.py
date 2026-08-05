@@ -102,6 +102,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--teacher-dataset-only", action="store_true")
     parser.add_argument("--prepare-teacher-inputs-only", action="store_true")
     parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument(
+        "--training-unit",
+        choices=("epochs", "updates"),
+        default="epochs",
+    )
+    parser.add_argument("--updates", type=int, default=0)
+    parser.add_argument("--warmup-updates", type=int, default=0)
+    parser.add_argument(
+        "--lr-scheduler",
+        choices=("constant", "cosine"),
+        default="constant",
+    )
+    parser.add_argument("--ema-rate", type=float, default=0.0)
+    parser.add_argument("--use-ema-for-validation", action="store_true")
+    parser.add_argument("--use-ema-for-reverse", action="store_true")
+    parser.add_argument("--checkpoint-every-updates", type=int, default=0)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--weight-decay", type=float, default=0.0)
@@ -176,6 +192,16 @@ def parse_args() -> argparse.Namespace:
             "--prepare-teacher-inputs-only cannot be combined with dataset-only "
             "or skip-training flags"
         )
+    if args.training_unit == "updates" and args.updates < 1:
+        parser.error("--training-unit updates requires --updates > 0")
+    if args.warmup_updates < 0:
+        parser.error("--warmup-updates must be non-negative")
+    if args.checkpoint_every_updates < 0:
+        parser.error("--checkpoint-every-updates must be non-negative")
+    if not 0.0 <= args.ema_rate < 1.0:
+        parser.error("--ema-rate must be in [0, 1)")
+    if (args.use_ema_for_validation or args.use_ema_for_reverse) and args.ema_rate <= 0:
+        parser.error("EMA model selection requires --ema-rate > 0")
     return args
 
 
@@ -1683,6 +1709,213 @@ def evaluate_dataset_loss(
     return float(value)
 
 
+def select_online_or_ema_model(
+    online_model,
+    ema_model,
+    *,
+    use_ema: bool,
+    purpose: str,
+):
+    if not use_ema:
+        return online_model, "online"
+    if ema_model is None:
+        raise ValueError(f"EMA was requested for {purpose}, but EMA is disabled")
+    return ema_model, "ema"
+
+
+def evaluate_selected_validation_loss(
+    online_model,
+    ema_model,
+    dataset: Dict[str, torch.Tensor],
+    *,
+    teacher: str,
+    use_ema: bool,
+) -> tuple[float, float | None, float | None, str]:
+    """Evaluate only the model selected for validation."""
+
+    validation_model, model_source = select_online_or_ema_model(
+        online_model,
+        ema_model,
+        use_ema=use_ema,
+        purpose="validation",
+    )
+    validation_loss = evaluate_dataset_loss(
+        validation_model,
+        dataset,
+        teacher=teacher,
+    )
+    validation_loss_online = (
+        validation_loss if model_source == "online" else None
+    )
+    validation_loss_ema = validation_loss if model_source == "ema" else None
+    return (
+        validation_loss,
+        validation_loss_online,
+        validation_loss_ema,
+        model_source,
+    )
+
+
+def build_model_checkpoint_payload(
+    *,
+    selected_model,
+    online_model,
+    ema_model,
+    model_source: str,
+    teacher: str,
+    training_path: str,
+    hidden: int,
+    n_blocks: int,
+    num_frequencies: int,
+    dtype: str,
+    training_state: Dict[str, object],
+    training_unit: str,
+    requested_epochs: int,
+    requested_updates: int,
+    base_learning_rate: float,
+    warmup_updates: int,
+    lr_scheduler: str,
+    ema_rate: float,
+    use_ema_for_validation: bool,
+    use_ema_for_reverse: bool,
+    checkpoint_every_updates: int,
+    beta_schedule: str,
+    beta_0: float,
+    beta_f: float,
+    beta_t0: float,
+    beta_tf: float,
+) -> Dict[str, object]:
+    """Build a backward-compatible final model checkpoint."""
+
+    return {
+        "teacher": teacher,
+        "training_path": training_path,
+        "state_dict": selected_model.state_dict(),
+        "model_source": model_source,
+        "online_state_dict": online_model.state_dict(),
+        "ema_state_dict": (
+            ema_model.state_dict() if ema_model is not None else None
+        ),
+        "optimizer_state_dict": training_state["optimizer_state_dict"],
+        "scheduler_state": training_state["scheduler_state"],
+        "current_update": training_state["current_update"],
+        "current_epoch": training_state["current_epoch"],
+        "training_unit": training_unit,
+        "requested_total_updates": requested_updates,
+        "requested_epochs": requested_epochs,
+        "actual_optimizer_updates": training_state["actual_optimizer_updates"],
+        "updates_per_epoch": training_state["updates_per_epoch"],
+        "effective_epochs": training_state["effective_epochs"],
+        "base_learning_rate": base_learning_rate,
+        "warmup_updates": warmup_updates,
+        "lr_scheduler": lr_scheduler,
+        "initial_learning_rate": training_state["initial_learning_rate"],
+        "peak_learning_rate": training_state["peak_learning_rate"],
+        "final_learning_rate": training_state["final_learning_rate"],
+        "learning_rate_trace": training_state["learning_rate_trace"],
+        "ema_rate": ema_rate,
+        "use_ema_for_validation": use_ema_for_validation,
+        "use_ema_for_reverse": use_ema_for_reverse,
+        "checkpoint_every_updates": checkpoint_every_updates,
+        "normalization_state": training_state["normalization_state"],
+        "hidden": hidden,
+        "n_blocks": n_blocks,
+        "num_frequencies": num_frequencies,
+        "dtype": dtype,
+        "beta_schedule": beta_schedule,
+        "beta_0": beta_0,
+        "beta_f": beta_f,
+        "beta_t0": beta_t0,
+        "beta_tf": beta_tf,
+    }
+
+
+def make_training_checkpoint_callback(
+    *,
+    output_dir: Path,
+    args: argparse.Namespace,
+):
+    if args.checkpoint_every_updates <= 0:
+        return None
+
+    checkpoint_dir = output_dir / "training_checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    def complete_model_state(
+        network_state: Dict[str, torch.Tensor] | None,
+        normalization_state: Dict[str, torch.Tensor],
+    ) -> Dict[str, torch.Tensor] | None:
+        if network_state is None:
+            return None
+        prefix = "skorokhod_network." if args.teacher == "malliavin" else ""
+        state = {
+            f"{prefix}{key}": value
+            for key, value in normalization_state.items()
+        }
+        state.update(
+            {
+                f"{prefix}net.{key}": value
+                for key, value in network_state.items()
+            }
+        )
+        return state
+
+    def save_checkpoint(payload: Dict[str, object]) -> None:
+        enriched = dict(payload)
+        online_state = complete_model_state(
+            enriched["online_network_state_dict"],
+            enriched["normalization_state"],
+        )
+        ema_state = complete_model_state(
+            enriched["ema_network_state_dict"],
+            enriched["normalization_state"],
+        )
+        model_source = (
+            "ema" if args.use_ema_for_reverse and ema_state is not None else "online"
+        )
+        enriched.update(
+            {
+                "format_version": 1,
+                "teacher": args.teacher,
+                "training_path": (
+                    "marginal_skorokhod"
+                    if args.teacher == "malliavin"
+                    else "direct_score"
+                ),
+                "training_unit": args.training_unit,
+                "requested_epochs": args.epochs,
+                "requested_updates": args.updates,
+                "requested_total_updates": args.updates,
+                "base_learning_rate": args.learning_rate,
+                "checkpoint_every_updates": args.checkpoint_every_updates,
+                "hidden": args.hidden,
+                "n_blocks": args.n_blocks,
+                "num_frequencies": args.num_frequencies,
+                "dtype": args.dtype,
+                "model_source": model_source,
+                "state_dict": (
+                    ema_state if model_source == "ema" else online_state
+                ),
+                "online_state_dict": online_state,
+                "ema_state_dict": ema_state,
+                "use_ema_for_validation": args.use_ema_for_validation,
+                "use_ema_for_reverse": args.use_ema_for_reverse,
+                "beta_schedule": args.beta_schedule,
+                "beta_0": args.beta_0,
+                "beta_f": args.beta_f,
+                "beta_t0": args.beta_t0,
+                "beta_tf": args.beta_tf,
+            }
+        )
+        update = int(enriched["current_update"])
+        torch.save(
+            enriched,
+            checkpoint_dir / f"checkpoint_update_{update:09d}.pt",
+        )
+
+    return save_checkpoint
+
+
 def build_score_fn(model):
     def _score_fn(time_batch: torch.Tensor, x_batch: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
@@ -1875,6 +2108,11 @@ def run_saved_model_evaluation(
 
     log(f"loading saved {teacher} model from {model_path}")
     checkpoint = torch.load(model_path, map_location="cpu")
+    model_used_for_reverse = str(checkpoint.get("model_source", "online"))
+    if model_used_for_reverse not in {"online", "ema"}:
+        raise ValueError(
+            f"invalid model_source in checkpoint: {model_used_for_reverse!r}"
+        )
     model_a = build_model_from_run_config(model_path, source_config, device=device)
     (
         model_b,
@@ -2133,6 +2371,29 @@ def run_saved_model_evaluation(
         "beta_f": float(source_config.get("beta_f", 5.0)),
         "beta_t0": float(source_config.get("beta_t0", 0.0)),
         "beta_tf": float(source_config.get("beta_tf", 1.0)),
+        "training_unit": str(source_config.get("training_unit", "epochs")),
+        "requested_updates": int(source_config.get("requested_updates", 0)),
+        "actual_optimizer_updates": int(
+            source_config.get("actual_optimizer_updates", 0)
+        ),
+        "effective_epochs": float(source_config.get("effective_epochs", 0.0)),
+        "warmup_updates": int(source_config.get("warmup_updates", 0)),
+        "lr_scheduler": str(source_config.get("lr_scheduler", "constant")),
+        "ema_enabled": checkpoint.get("ema_state_dict") is not None,
+        "ema_rate": float(source_config.get("ema_rate", 0.0)),
+        "use_ema_for_validation": bool(
+            source_config.get("use_ema_for_validation", False)
+        ),
+        "use_ema_for_reverse": bool(
+            source_config.get("use_ema_for_reverse", False)
+        ),
+        "model_used_for_reverse": model_used_for_reverse,
+        "final_learning_rate": float(
+            source_config.get("final_learning_rate", 0.0)
+        ),
+        "checkpoint_every_updates": int(
+            source_config.get("checkpoint_every_updates", 0)
+        ),
     }
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)
@@ -2441,8 +2702,12 @@ def main() -> None:
     teacher_generation_seconds = time.perf_counter() - teacher_started
 
     train_started = time.perf_counter()
+    checkpoint_callback = make_training_checkpoint_callback(
+        output_dir=output_dir,
+        args=args,
+    )
     if args.teacher == "malliavin":
-        model, history = train_s2_marginal_score(
+        model, history, training_state = train_s2_marginal_score(
             train_dataset,
             n_epochs=args.epochs,
             batch_size=args.batch_size,
@@ -2453,10 +2718,18 @@ def main() -> None:
             num_frequencies=args.num_frequencies,
             device=device,
             return_history=True,
+            training_unit=args.training_unit,
+            updates=args.updates,
+            warmup_updates=args.warmup_updates,
+            lr_scheduler=args.lr_scheduler,
+            ema_rate=args.ema_rate,
+            checkpoint_every_updates=args.checkpoint_every_updates,
+            checkpoint_callback=checkpoint_callback,
+            return_training_state=True,
         )
         training_path = "marginal_skorokhod"
     else:
-        model, history = train_s2_score_model(
+        model, history, training_state = train_s2_score_model(
             train_dataset,
             n_epochs=args.epochs,
             batch_size=args.batch_size,
@@ -2467,15 +2740,41 @@ def main() -> None:
             num_frequencies=args.num_frequencies,
             device=device,
             return_history=True,
+            training_unit=args.training_unit,
+            updates=args.updates,
+            warmup_updates=args.warmup_updates,
+            lr_scheduler=args.lr_scheduler,
+            ema_rate=args.ema_rate,
+            checkpoint_every_updates=args.checkpoint_every_updates,
+            checkpoint_callback=checkpoint_callback,
+            return_training_state=True,
         )
         training_path = "direct_score"
     training_seconds = time.perf_counter() - train_started
+    ema_model = training_state["ema_model"]
 
     initial_train_loss = float(history.get("initial_train_loss", float("nan")))
     final_train_loss = float(history.get("final_train_loss", float("nan")))
     best_train_loss = float(history.get("best_train_loss", float("nan")))
 
-    validation_loss = evaluate_dataset_loss(model, validation_dataset, teacher=args.teacher)
+    (
+        validation_loss,
+        validation_loss_online,
+        validation_loss_ema,
+        validation_model_source,
+    ) = evaluate_selected_validation_loss(
+        model,
+        ema_model,
+        validation_dataset,
+        teacher=args.teacher,
+        use_ema=args.use_ema_for_validation,
+    )
+    reverse_model, model_used_for_reverse = select_online_or_ema_model(
+        model,
+        ema_model,
+        use_ema=args.use_ema_for_reverse,
+        purpose="reverse sampling",
+    )
 
     terminal_samples = maybe_load_or_create_terminal_samples(
         path=args.terminal_samples_path,
@@ -2498,7 +2797,7 @@ def main() -> None:
     reverse_started = time.perf_counter()
     generated = s2_reverse_grw(
         terminal_samples,
-        build_score_fn(model),
+        build_score_fn(reverse_model),
         terminal_time=args.maximum_time,
         n_steps=args.reverse_steps,
         standard_noise=reverse_noise,
@@ -2511,23 +2810,60 @@ def main() -> None:
     train_dataset_cpu = {key: value.detach().cpu() for key, value in train_dataset.items()}
     validation_dataset_cpu = {key: value.detach().cpu() for key, value in validation_dataset.items()}
 
-    torch.save(
-        {
-            "teacher": args.teacher,
-            "training_path": training_path,
-            "state_dict": model.state_dict(),
-            "hidden": args.hidden,
-            "n_blocks": args.n_blocks,
-            "num_frequencies": args.num_frequencies,
-            "dtype": args.dtype,
-            "beta_schedule": args.beta_schedule,
-            "beta_0": args.beta_0,
-            "beta_f": args.beta_f,
-            "beta_t0": args.beta_t0,
-            "beta_tf": args.beta_tf,
-        },
-        output_dir / "model.pt",
+    checkpoint_payload = build_model_checkpoint_payload(
+        selected_model=reverse_model,
+        online_model=model,
+        ema_model=ema_model,
+        model_source=model_used_for_reverse,
+        teacher=args.teacher,
+        training_path=training_path,
+        hidden=args.hidden,
+        n_blocks=args.n_blocks,
+        num_frequencies=args.num_frequencies,
+        dtype=args.dtype,
+        training_state=training_state,
+        training_unit=args.training_unit,
+        requested_epochs=args.epochs,
+        requested_updates=args.updates,
+        base_learning_rate=args.learning_rate,
+        warmup_updates=args.warmup_updates,
+        lr_scheduler=args.lr_scheduler,
+        ema_rate=args.ema_rate,
+        use_ema_for_validation=args.use_ema_for_validation,
+        use_ema_for_reverse=args.use_ema_for_reverse,
+        checkpoint_every_updates=args.checkpoint_every_updates,
+        beta_schedule=args.beta_schedule,
+        beta_0=args.beta_0,
+        beta_f=args.beta_f,
+        beta_t0=args.beta_t0,
+        beta_tf=args.beta_tf,
     )
+    torch.save(checkpoint_payload, output_dir / "model.pt")
+    training_run_metadata = {
+        "training_unit": args.training_unit,
+        "requested_training_unit": args.training_unit,
+        "requested_epochs": args.epochs,
+        "requested_updates": args.updates,
+        "actual_optimizer_updates": training_state["actual_optimizer_updates"],
+        "updates_per_epoch": training_state["updates_per_epoch"],
+        "effective_epochs": training_state["effective_epochs"],
+        "base_learning_rate": args.learning_rate,
+        "warmup_updates": args.warmup_updates,
+        "lr_scheduler": args.lr_scheduler,
+        "initial_learning_rate": training_state["initial_learning_rate"],
+        "peak_learning_rate": training_state["peak_learning_rate"],
+        "final_learning_rate": training_state["final_learning_rate"],
+        "learning_rate_trace": training_state["learning_rate_trace"],
+        "ema_enabled": ema_model is not None,
+        "ema_rate": args.ema_rate,
+        "use_ema_for_validation": args.use_ema_for_validation,
+        "use_ema_for_reverse": args.use_ema_for_reverse,
+        "model_used_for_reverse": model_used_for_reverse,
+        "checkpoint_every_updates": args.checkpoint_every_updates,
+    }
+    run_config.update(training_run_metadata)
+    with (output_dir / "run_config.json").open("w", encoding="utf-8") as handle:
+        json.dump(run_config, handle, indent=2, default=str)
     with (output_dir / "training_history.json").open("w", encoding="utf-8") as handle:
         json.dump(history, handle, indent=2)
 
@@ -2559,6 +2895,10 @@ def main() -> None:
         "final_train_loss": final_train_loss,
         "best_train_loss": best_train_loss,
         "validation_loss": validation_loss,
+        "final_train_loss_online": final_train_loss,
+        "best_train_loss_online": best_train_loss,
+        "validation_loss_online": validation_loss_online,
+        "validation_loss_ema": validation_loss_ema,
         "teacher_generation_seconds": teacher_generation_seconds,
         "teacher_implementation": args.teacher_implementation,
         "requested_teacher_batch_size": args.teacher_batch_size,
@@ -2599,6 +2939,7 @@ def main() -> None:
         "beta_f": args.beta_f,
         "beta_t0": args.beta_t0,
         "beta_tf": args.beta_tf,
+        **training_run_metadata,
     }
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)

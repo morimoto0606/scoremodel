@@ -283,6 +283,14 @@ def train_s2_marginal_score(
     num_frequencies: int = 16,
     device: str = "cuda",
     return_history: bool = False,
+    training_unit: str = "epochs",
+    updates: int = 0,
+    warmup_updates: int = 0,
+    lr_scheduler: str = "constant",
+    ema_rate: float = 0.0,
+    checkpoint_every_updates: int = 0,
+    checkpoint_callback=None,
+    return_training_state: bool = False,
 ) -> S2SkorokhodScoreModel:
     """Train Mirafzali Algorithm 6 and return an intrinsic S2 score model."""
 
@@ -306,10 +314,34 @@ def train_s2_marginal_score(
         num_frequencies=num_frequencies,
         device=device,
         return_history=return_history,
+        training_unit=training_unit,
+        updates=updates,
+        warmup_updates=warmup_updates,
+        lr_scheduler=lr_scheduler,
+        ema_rate=ema_rate,
+        checkpoint_every_updates=checkpoint_every_updates,
+        checkpoint_callback=checkpoint_callback,
+        return_training_state=return_training_state,
     )
+    if return_history and return_training_state:
+        delta_model, history, training_state = result
+        online_model = S2SkorokhodScoreModel(delta_model)
+        if training_state["ema_model"] is not None:
+            training_state["ema_model"] = S2SkorokhodScoreModel(
+                training_state["ema_model"]
+            )
+        return online_model, history, training_state
     if return_history:
         delta_model, history = result
         return S2SkorokhodScoreModel(delta_model), history
+    if return_training_state:
+        delta_model, training_state = result
+        online_model = S2SkorokhodScoreModel(delta_model)
+        if training_state["ema_model"] is not None:
+            training_state["ema_model"] = S2SkorokhodScoreModel(
+                training_state["ema_model"]
+            )
+        return online_model, training_state
     return S2SkorokhodScoreModel(result)
 
 
@@ -325,6 +357,14 @@ def train_s2_score_model(
     num_frequencies: int = 16,
     device: str = "cuda",
     return_history: bool = False,
+    training_unit: str = "epochs",
+    updates: int = 0,
+    warmup_updates: int = 0,
+    lr_scheduler: str = "constant",
+    ema_rate: float = 0.0,
+    checkpoint_every_updates: int = 0,
+    checkpoint_callback=None,
+    return_training_state: bool = False,
 ):
     """Train a direct S2 score regressor with the same architecture and optimizer."""
 
@@ -345,6 +385,14 @@ def train_s2_score_model(
         num_frequencies=num_frequencies,
         device=device,
         return_history=return_history,
+        training_unit=training_unit,
+        updates=updates,
+        warmup_updates=warmup_updates,
+        lr_scheduler=lr_scheduler,
+        ema_rate=ema_rate,
+        checkpoint_every_updates=checkpoint_every_updates,
+        checkpoint_callback=checkpoint_callback,
+        return_training_state=return_training_state,
     )
 
 
