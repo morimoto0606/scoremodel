@@ -9,9 +9,10 @@ update with scoremodel_ext's S2 upstream-compatible GRW implementation.
 from __future__ import annotations
 
 import argparse
+from collections import namedtuple
 import json
 from pathlib import Path
-import sys
+import pickle
 from timeit import default_timer as timer
 from typing import Any, Callable
 
@@ -28,8 +29,6 @@ from scoremodel_ext.manifold.s2_reverse_diagnostics import (
 )
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-UPSTREAM_ROOT = REPOSITORY_ROOT / "upstream" / "riemannian-score-sde"
 DEFAULT_RUN_DIR = Path("results/earthquake_teacher_comparison/upstream_heat")
 DEFAULT_CHECKPOINT_DIR = DEFAULT_RUN_DIR / "ckpt"
 DEFAULT_NATIVE_SAMPLES = DEFAULT_RUN_DIR / "generated_samples.npy"
@@ -49,12 +48,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-dir", type=Path, default=DEFAULT_CHECKPOINT_DIR)
     parser.add_argument("--native-samples", type=Path, default=DEFAULT_NATIVE_SAMPLES)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument(
-        "--config-path",
-        type=Path,
-        default=None,
-        help="resolved upstream Hydra config (default: RUN_DIR/.hydra/config.yaml)",
-    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--sample-count",
@@ -81,127 +74,168 @@ def _require_file(path: Path, description: str) -> Path:
     return resolved
 
 
-def _resolve_config_path(checkpoint_dir: Path, requested: Path | None) -> Path:
-    if requested is not None:
-        return _require_file(requested, "resolved upstream config")
-    candidates = (
-        checkpoint_dir.parent / ".hydra" / "config.yaml",
-        checkpoint_dir.parent / "experiment_config.yaml",
-    )
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
-    rendered = ", ".join(str(path) for path in candidates)
-    raise FileNotFoundError(
-        "the checkpoint needs its resolved Hydra config to reconstruct the "
-        f"network; checked: {rendered}"
-    )
+_TrainState = namedtuple(
+    "TrainState",
+    ("opt_state", "model_state", "step", "params", "ema_rate", "params_ema", "rng"),
+)
+_ScaleByAdamState = namedtuple("ScaleByAdamState", ("count", "mu", "nu"))
+_ScaleByScheduleState = namedtuple("ScaleByScheduleState", ("count",))
+_EmptyState = namedtuple("EmptyState", ())
 
 
-def _import_upstream_dependencies() -> dict[str, Any]:
-    """Import upstream-only dependencies without changing its source tree."""
+class _CheckpointUnpickler(pickle.Unpickler):
+    """Read the tree skeleton without importing legacy score_sde or Optax."""
 
-    upstream_string = str(UPSTREAM_ROOT)
-    if upstream_string not in sys.path:
-        sys.path.insert(0, upstream_string)
-    try:
-        import haiku as hk
-        import jax
-        import jax.numpy as jnp
-        from hydra.utils import get_class, instantiate
-        from omegaconf import OmegaConf
-        from score_sde.utils import restore
-    except ImportError as error:
-        raise RuntimeError(
-            "upstream inference dependencies are unavailable; install the "
-            "requirements from upstream/riemannian-score-sde/requirements.txt "
-            "in the same environment as scoremodel_ext"
-        ) from error
-    return {
-        "hk": hk,
-        "jax": jax,
-        "jnp": jnp,
-        "get_class": get_class,
-        "instantiate": instantiate,
-        "OmegaConf": OmegaConf,
-        "restore": restore,
+    _COMPATIBLE_TYPES = {
+        ("score_sde.utils.training", "TrainState"): _TrainState,
+        ("optax._src.transform", "ScaleByAdamState"): _ScaleByAdamState,
+        ("optax._src.transform", "ScaleByScheduleState"): _ScaleByScheduleState,
+        ("optax._src.base", "EmptyState"): _EmptyState,
     }
 
+    def find_class(self, module: str, name: str) -> type:
+        compatible = self._COMPATIBLE_TYPES.get((module, name))
+        if compatible is None:
+            raise pickle.UnpicklingError(
+                f"unsupported global in checkpoint tree: {module}.{name}"
+            )
+        return compatible
 
-def _validate_checkpoint_config(cfg: Any) -> None:
-    teacher = cfg.get("teacher")
-    if teacher != "heat":
-        raise ValueError(f"expected an upstream Heat checkpoint, config has {teacher=}")
-    beta = cfg.get("beta_schedule")
-    if beta is None:
-        raise ValueError("resolved config has no beta_schedule")
-    actual = (float(beta.beta_0), float(beta.beta_f), float(beta.t0), float(beta.tf))
-    expected = (BETA_0, BETA_F, 0.0, TERMINAL_TIME)
-    if actual != expected:
+
+def _load_array_stream(path: Path) -> list[np.ndarray]:
+    arrays = []
+    stream_size = path.stat().st_size
+    with path.open("rb") as handle:
+        while handle.tell() < stream_size:
+            arrays.append(np.load(handle, allow_pickle=False))
+    if not arrays:
+        raise ValueError(f"checkpoint array stream is empty: {path}")
+    return arrays
+
+
+def _restore_checkpoint_tree(template: Any, arrays: list[np.ndarray]) -> Any:
+    """Reproduce JAX's legacy tree traversal using only Python containers."""
+
+    position = 0
+
+    def restore(node: Any) -> Any:
+        nonlocal position
+        if node is None:
+            return None
+        if isinstance(node, dict):
+            return {key: restore(node[key]) for key in sorted(node)}
+        if isinstance(node, list):
+            return [restore(value) for value in node]
+        if isinstance(node, tuple):
+            values = [restore(value) for value in node]
+            if hasattr(node, "_fields"):
+                return type(node)(*values)
+            return tuple(values)
+        if position >= len(arrays):
+            raise ValueError("checkpoint tree has more leaves than arrays.npy")
+        value = arrays[position]
+        position += 1
+        return value
+
+    restored = restore(template)
+    if position != len(arrays):
         raise ValueError(
-            f"checkpoint beta schedule {actual} does not match required {expected}"
+            "checkpoint arrays.npy has more leaves than tree.pkl: "
+            f"used {position} of {len(arrays)}"
         )
+    return restored
+
+
+def _load_ema_checkpoint(checkpoint_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    tree_path = _require_file(checkpoint_dir / "tree.pkl", "checkpoint tree")
+    arrays_path = _require_file(checkpoint_dir / "arrays.npy", "checkpoint arrays")
+    with tree_path.open("rb") as handle:
+        template = _CheckpointUnpickler(handle).load()
+    arrays = _load_array_stream(arrays_path)
+    train_state = _restore_checkpoint_tree(template, arrays)
+    if not isinstance(train_state, _TrainState):
+        raise TypeError("checkpoint root is not the expected TrainState")
+    if not isinstance(train_state.params_ema, dict) or not train_state.params_ema:
+        raise ValueError("checkpoint has no EMA parameters (params_ema)")
+    metadata = {
+        "checkpoint_step": int(np.asarray(train_state.step)),
+        "ema_rate": float(np.asarray(train_state.ema_rate)),
+        "parameter_source": "params_ema",
+        "checkpoint_array_count": len(arrays),
+    }
+    return train_state.params_ema, metadata
 
 
 def _build_raw_ema_network(
     checkpoint_dir: Path,
-    config_path: Path,
 ) -> tuple[Callable[[torch.Tensor, torch.Tensor], torch.Tensor], str, dict[str, Any]]:
-    dependencies = _import_upstream_dependencies()
-    hk = dependencies["hk"]
-    jax = dependencies["jax"]
-    jnp = dependencies["jnp"]
-    get_class = dependencies["get_class"]
-    instantiate = dependencies["instantiate"]
-    OmegaConf = dependencies["OmegaConf"]
-    restore = dependencies["restore"]
+    try:
+        import jax
+        import jax.numpy as jnp
+    except ImportError as error:
+        raise RuntimeError("JAX must be installed in the scoremodel environment") from error
 
-    cfg = OmegaConf.load(config_path)
-    _validate_checkpoint_config(cfg)
-    dtype_name = str(cfg.get("dtype", "float64"))
-    if dtype_name not in {"float32", "float64"}:
-        raise ValueError(f"unsupported upstream dtype: {dtype_name}")
-    if dtype_name == "float64":
-        jax.config.update("jax_enable_x64", True)
+    params_ema, checkpoint_metadata = _load_ema_checkpoint(checkpoint_dir)
+    parameter_arrays = [
+        np.asarray(value)
+        for module in params_ema.values()
+        for value in module.values()
+    ]
+    dtype = np.result_type(*[value.dtype for value in parameter_arrays])
+    if dtype not in {np.dtype("float32"), np.dtype("float64")}:
+        raise ValueError(f"unsupported checkpoint parameter dtype: {dtype}")
+    dtype_name = dtype.name
+    jax.config.update("jax_enable_x64", dtype_name == "float64")
 
-    manifold = instantiate(cfg.manifold)
-
-    def model(y: Any, t: Any, context: Any = None) -> Any:
-        output_shape = get_class(cfg.generator._target_).output_shape(manifold)
-        network = instantiate(
-            cfg.generator,
-            cfg.architecture,
-            cfg.embedding,
-            output_shape,
-            manifold=manifold,
+    hidden_shapes = []
+    module_names = sorted(params_ema)
+    expected_names = [
+        "div_free_generator/~/concat/linear",
+        *[
+            f"div_free_generator/~/concat/linear_{index}"
+            for index in range(1, 6)
+        ],
+    ]
+    if module_names != expected_names:
+        raise ValueError(
+            "checkpoint is not the expected upstream DivFreeGenerator/Concat "
+            f"architecture: modules={module_names}"
         )
-        if context is not None:
-            t_expanded = jnp.expand_dims(t.reshape(-1), -1)
-            if context.shape[0] != y.shape[0]:
-                context = jnp.repeat(jnp.expand_dims(context, 0), y.shape[0], 0)
-            network_context = jnp.concatenate([t_expanded, context], axis=-1)
-        else:
-            network_context = t
-        return network(y, network_context)
+    for name in expected_names[:-1]:
+        hidden_shapes.append(int(np.asarray(params_ema[name]["b"]).shape[0]))
+    if tuple(np.asarray(params_ema[expected_names[0]]["w"]).shape[:1]) != (4,):
+        raise ValueError("Concat input must be three S2 coordinates plus time")
+    if tuple(np.asarray(params_ema[expected_names[-1]]["b"]).shape) != (3,):
+        raise ValueError("DivFreeGenerator output must have three SO(3) weights")
 
-    transformed = hk.transform_with_state(model)
-    train_state = restore(str(checkpoint_dir))
-    params_ema = getattr(train_state, "params_ema", None)
-    model_state = getattr(train_state, "model_state", None)
-    if params_ema is None:
-        raise ValueError("checkpoint has no EMA parameters (params_ema)")
+    layers = tuple(
+        (
+            jnp.asarray(params_ema[name]["w"]),
+            jnp.asarray(params_ema[name]["b"]),
+        )
+        for name in expected_names
+    )
 
     @jax.jit
     def apply_ema(points: Any, times: Any) -> Any:
-        output, _ = transformed.apply(
-            params_ema,
-            model_state,
-            None,
-            y=points,
-            t=times,
-            context=None,
-        )
-        return output
+        # Exact inference path of upstream Concat: five sin-activated hidden
+        # affine layers followed by one linear three-weight output layer.
+        if times.ndim == points.ndim - 1:
+            times = jnp.expand_dims(times, axis=-1)
+        values = jnp.concatenate([points, times], axis=-1)
+        for weight, bias in layers[:-1]:
+            values = jnp.sin(values @ weight + bias)
+        weight, bias = layers[-1]
+        weights = values @ weight + bias
+
+        # Exact S2 DivFreeGenerator basis from the upstream geomstats fork.
+        zeros = jnp.zeros_like(points[..., 0])
+        f01 = jnp.stack([-points[..., 1], points[..., 0], zeros], axis=-1)
+        f02 = jnp.stack([-points[..., 2], zeros, points[..., 0]], axis=-1)
+        f12 = jnp.stack([zeros, -points[..., 2], points[..., 1]], axis=-1)
+        generators = jnp.stack([f01, f02, f12], axis=-1)
+        output = jnp.einsum("...n,...dn->...d", weights, generators)
+        return output - jnp.sum(output * points, axis=-1, keepdims=True) * points
 
     numpy_dtype = np.float64 if dtype_name == "float64" else np.float32
 
@@ -217,13 +251,9 @@ def _build_raw_ema_network(
             output_numpy.tolist(), dtype=points.dtype, device=points.device
         )
 
-    checkpoint_metadata = {
-        "checkpoint_step": int(train_state.step),
-        "ema_rate": float(train_state.ema_rate),
-        "parameter_source": "params_ema",
-        "config_teacher": str(cfg.teacher),
-        "config_dtype": dtype_name,
-    }
+    checkpoint_metadata["network_architecture"] = "upstream DivFreeGenerator/Concat"
+    checkpoint_metadata["hidden_shapes"] = hidden_shapes
+    checkpoint_metadata["config_dtype"] = dtype_name
     return raw_network_output, dtype_name, checkpoint_metadata
 
 
@@ -364,15 +394,13 @@ def main() -> None:
     _require_file(checkpoint_dir / "tree.pkl", "checkpoint tree")
     _require_file(checkpoint_dir / "arrays.npy", "checkpoint arrays")
     native_path = _require_file(args.native_samples, "native generated samples")
-    config_path = _resolve_config_path(checkpoint_dir, args.config_path)
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     native = _load_native_samples(native_path)
     sample_count = native.shape[0] if args.sample_count is None else args.sample_count
     raw_network_output, dtype_name, checkpoint_metadata = _build_raw_ema_network(
-        checkpoint_dir,
-        config_path,
+        checkpoint_dir
     )
     dtype = torch.float64 if dtype_name == "float64" else torch.float32
     terminal, standard_noise = _uniform_s2_and_noise(
@@ -414,7 +442,6 @@ def main() -> None:
     diagnostics = {
         "inference_only": True,
         "checkpoint_dir": str(checkpoint_dir),
-        "config_path": str(config_path),
         "native_samples_path": str(native_path),
         "output_coordinate_system": "standard-earth",
         **checkpoint_metadata,
