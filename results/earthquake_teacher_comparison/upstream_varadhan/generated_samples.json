@@ -1,0 +1,9 @@
+{
+  "coordinate_system": "upstream-earthquake-antipodal",
+  "teacher": "varadhan",
+  "reverse_steps": 100,
+  "epsilon": 0.001,
+  "sample_count": 4096,
+  "dtype": "float64",
+  "reverse_sampling_seconds": 1.5421352423727512
+}

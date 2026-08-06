@@ -1,0 +1,17 @@
+{
+  "source": "upstream-riemannian-score-sde",
+  "teacher": "varadhan",
+  "train_loss": 0.958209204063091,
+  "validation_loss": null,
+  "s2_rbf_mmd": 0.0014720180471741173,
+  "nearest_neighbor_geodesic_mean": 0.022919129893486923,
+  "nearest_neighbor_geodesic_median": 0.01365800250767519,
+  "nearest_neighbor_geodesic_max": 0.3283003125972376,
+  "reverse_sampling_seconds": 1.5421352423727512,
+  "sample_count": 4096,
+  "reference_count": 6120,
+  "coordinate_conversion": "upstream-earthquake-antipodal -> standard-earth",
+  "reverse_steps": 100,
+  "epsilon": 0.001,
+  "dtype": "float64"
+}

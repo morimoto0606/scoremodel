@@ -1,0 +1,17 @@
+{
+  "source": "upstream-riemannian-score-sde",
+  "teacher": "heat",
+  "train_loss": 0.734028961948612,
+  "validation_loss": null,
+  "s2_rbf_mmd": -0.00011174454267237621,
+  "nearest_neighbor_geodesic_mean": 0.020880091478676446,
+  "nearest_neighbor_geodesic_median": 0.013038122150262727,
+  "nearest_neighbor_geodesic_max": 0.3936275966123415,
+  "reverse_sampling_seconds": 1.5734735019505024,
+  "sample_count": 4096,
+  "reference_count": 6120,
+  "coordinate_conversion": "upstream-earthquake-antipodal -> standard-earth",
+  "reverse_steps": 100,
+  "epsilon": 0.001,
+  "dtype": "float64"
+}

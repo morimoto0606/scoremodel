@@ -1,0 +1,6 @@
+{
+  "method": "ext_malliavin",
+  "run_directory": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_malliavin",
+  "samples": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_malliavin/generated_samples.pt",
+  "metrics": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_malliavin/metrics.json"
+}

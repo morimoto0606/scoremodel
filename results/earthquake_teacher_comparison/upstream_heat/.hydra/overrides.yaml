@@ -1,0 +1,8 @@
+- experiment=earthquake_heat
+- mode=test
+- test_val=false
+- test_test=false
+- test_plot=true
+- generated_samples_path=generated_samples.npy
+- logger=csv
+- seed=0

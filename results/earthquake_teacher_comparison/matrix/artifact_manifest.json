@@ -1,0 +1,41 @@
+{
+  "comparison_order": [
+    "upstream_heat",
+    "upstream_varadhan",
+    "ext_heat",
+    "ext_varadhan",
+    "ext_malliavin"
+  ],
+  "run_directories": {
+    "upstream_heat": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_heat",
+    "upstream_varadhan": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_varadhan",
+    "ext_heat": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat",
+    "ext_varadhan": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_varadhan",
+    "ext_malliavin": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_malliavin"
+  },
+  "sample_artifacts": {
+    "upstream_heat": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_heat/generated_samples.pt",
+    "upstream_varadhan": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_varadhan/generated_samples.pt",
+    "ext_heat": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat/generated_samples.pt",
+    "ext_varadhan": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_varadhan/generated_samples.pt",
+    "ext_malliavin": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_malliavin/generated_samples.pt"
+  },
+  "shared_conditions": {
+    "dataset": "Earthquake",
+    "manifold": "S2",
+    "beta_schedule": "linear(0.001, 5.0, t0=0, tf=1)",
+    "reverse_process": "reverse SDE",
+    "predictor": "GRW",
+    "corrector": null,
+    "reverse_steps": 100,
+    "epsilon": 0.001,
+    "display_sample_count": 4096,
+    "evaluated_sample_counts": {
+      "upstream_heat": 4096,
+      "upstream_varadhan": 4096,
+      "ext_heat": 4096,
+      "ext_varadhan": 4096,
+      "ext_malliavin": 4096
+    }
+  }
+}

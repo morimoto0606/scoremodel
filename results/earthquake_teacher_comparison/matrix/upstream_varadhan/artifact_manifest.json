@@ -1,0 +1,6 @@
+{
+  "method": "upstream_varadhan",
+  "run_directory": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_varadhan",
+  "samples": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_varadhan/generated_samples.pt",
+  "metrics": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_varadhan/metrics.json"
+}

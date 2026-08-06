@@ -1,0 +1,6 @@
+{
+  "method": "ext_heat",
+  "run_directory": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat",
+  "samples": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat/generated_samples.pt",
+  "metrics": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat/metrics.json"
+}
