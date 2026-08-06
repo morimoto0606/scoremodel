@@ -1,0 +1,26 @@
+{
+  "heat": {
+    "train_loss": 4.528469627664931e-15,
+    "validation_loss": 43.02425502830863,
+    "s2_rbf_mmd": 0.01454625796480824,
+    "nearest_neighbor_geodesic_mean": 0.14519555587851202,
+    "nearest_neighbor_geodesic_median": 0.1123515641709374,
+    "reverse_sampling_seconds": 85.22812649980187
+  },
+  "varadhan": {
+    "train_loss": 3.538024216792309e-16,
+    "validation_loss": 405.5413892356581,
+    "s2_rbf_mmd": 0.008999250286247706,
+    "nearest_neighbor_geodesic_mean": 0.13181756065905884,
+    "nearest_neighbor_geodesic_median": 0.09459287253283598,
+    "reverse_sampling_seconds": 90.814886610955
+  },
+  "malliavin": {
+    "train_loss": 4.2909138440386154e-18,
+    "validation_loss": 238.66455615075742,
+    "s2_rbf_mmd": 0.002941638543102032,
+    "nearest_neighbor_geodesic_mean": 0.12544311762482788,
+    "nearest_neighbor_geodesic_median": 0.09201800495703547,
+    "reverse_sampling_seconds": 76.76615204289556
+  }
+}
