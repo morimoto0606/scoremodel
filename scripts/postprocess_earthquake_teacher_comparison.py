@@ -11,6 +11,8 @@ from typing import Mapping
 from scoremodel_ext.manifold.earthquake_comparison_artifacts import (
     DEFAULT_COMPARISON_DIR,
     DEFAULT_PREFIX,
+    SUPPORTED_EARTH_COORDINATES,
+    load_upstream_generated_samples,
     load_saved_scatter_artifacts,
 )
 
@@ -48,7 +50,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--view-lon", type=float, default=70.0)
     parser.add_argument("--view-lat", type=float, default=30.0)
     parser.add_argument("--no-pdf", action="store_true")
-    return parser.parse_args()
+    parser.add_argument(
+        "--upstream-samples",
+        type=Path,
+        default=None,
+        help="optional upstream generated_samples.npy or generated_samples.pt",
+    )
+    parser.add_argument(
+        "--upstream-coordinate-system",
+        choices=SUPPORTED_EARTH_COORDINATES,
+        default=None,
+        help=(
+            "coordinate system of --upstream-samples; if omitted, a sibling "
+            "JSON metadata file must declare coordinate_system"
+        ),
+    )
+    args = parser.parse_args()
+    if args.upstream_coordinate_system is not None and args.upstream_samples is None:
+        parser.error("--upstream-coordinate-system requires --upstream-samples")
+    return args
 
 
 def build_metrics_comparison(run_dirs: Mapping[str, Path]) -> dict:
@@ -80,6 +100,26 @@ def save_metrics_comparison(run_dirs: Mapping[str, Path], output_path: Path) -> 
     return comparison
 
 
+def comparison_panel_configuration(
+    generated: Mapping[str, object],
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    """Return the legacy four-panel or opt-in upstream five-panel layout."""
+
+    panel_order = (
+        ("observed", "upstream", *TEACHERS)
+        if "upstream" in generated
+        else ("observed", *TEACHERS)
+    )
+    panel_titles = {
+        "observed": "Observed",
+        "upstream": "Upstream",
+        "heat": "Heat",
+        "varadhan": "Varadhan",
+        "malliavin": "Malliavin",
+    }
+    return panel_order, panel_titles
+
+
 def main() -> None:
     args = parse_args()
     run_dirs = {
@@ -89,6 +129,15 @@ def main() -> None:
     comparison_dir = args.comparison_dir.expanduser().resolve()
     comparison_dir.mkdir(parents=True, exist_ok=True)
     observed, generated = load_saved_scatter_artifacts(run_dirs)
+    if args.upstream_samples is not None:
+        generated = {
+            "upstream": load_upstream_generated_samples(
+                args.upstream_samples,
+                coordinate_system=args.upstream_coordinate_system,
+            ),
+            **generated,
+        }
+    panel_order, panel_titles = comparison_panel_configuration(generated)
 
     # Plotting imports are delayed so metrics/artifact tests remain headless.
     from scoremodel_ext.manifold.earthquake_smoke_viz import (
@@ -107,6 +156,8 @@ def main() -> None:
         view_lon=args.view_lon,
         view_lat=args.view_lat,
         save_pdf=not args.no_pdf,
+        panel_order=panel_order,
+        panel_titles=panel_titles,
     )
     scatter_japan = generate_earthquake_scatter_comparison(
         observed_points=observed,
@@ -117,6 +168,8 @@ def main() -> None:
         alpha=args.alpha,
         geographic_extent=(120.0, 150.0, 20.0, 50.0),
         save_pdf=not args.no_pdf,
+        panel_order=panel_order,
+        panel_titles=panel_titles,
     )
     density = generate_earthquake_density_bandwidth_outputs(
         observed_points=observed,
@@ -129,6 +182,8 @@ def main() -> None:
         view_lon=args.view_lon,
         view_lat=args.view_lat,
         save_pdf=not args.no_pdf,
+        panel_order=panel_order,
+        panel_titles=panel_titles,
     )
     overlay = generate_earthquake_malliavin_overlay(
         observed_points=observed,

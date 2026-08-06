@@ -5,9 +5,16 @@ import sys
 import types
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 import scoremodel_ext
+
+from scoremodel_ext.manifold.earthquake_comparison_artifacts import (
+    STANDARD_EARTH_COORDINATES,
+    UPSTREAM_ANTIPODAL_COORDINATES,
+    load_upstream_generated_samples,
+)
 
 from scripts.plot_earthquake_teacher_scatter_comparison import (
     parse_args,
@@ -15,6 +22,7 @@ from scripts.plot_earthquake_teacher_scatter_comparison import (
 )
 from scripts.postprocess_earthquake_teacher_comparison import (
     build_metrics_comparison,
+    comparison_panel_configuration,
     save_metrics_comparison,
 )
 from scripts import postprocess_earthquake_teacher_comparison as postprocess
@@ -60,6 +68,64 @@ def test_scatter_default_output_is_in_comparison_directory(monkeypatch):
     assert args.output == Path(
         "results/earthquake_linear_beta_100k_ema_comparison/scatter_global.png"
     )
+
+
+def test_upstream_npy_loader_requires_explicit_coordinate_convention(tmp_path):
+    path = tmp_path / "generated_samples.npy"
+    np.save(path, np.array([[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]]))
+
+    with pytest.raises(ValueError, match="coordinate system is unknown"):
+        load_upstream_generated_samples(path)
+
+    converted = load_upstream_generated_samples(
+        path,
+        coordinate_system=UPSTREAM_ANTIPODAL_COORDINATES,
+    )
+    torch.testing.assert_close(
+        converted,
+        torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=torch.float64),
+        rtol=0,
+        atol=0,
+    )
+
+
+def test_upstream_npy_loader_reads_standard_coordinate_metadata(tmp_path):
+    path = tmp_path / "generated_samples.npy"
+    np.save(path, np.array([[0.0, 0.0, 1.0]], dtype=np.float64))
+    path.with_suffix(".json").write_text(
+        json.dumps({"coordinate_system": STANDARD_EARTH_COORDINATES}),
+        encoding="utf-8",
+    )
+
+    loaded = load_upstream_generated_samples(path)
+    torch.testing.assert_close(
+        loaded,
+        torch.tensor([[0.0, 0.0, 1.0]], dtype=torch.float64),
+        rtol=0,
+        atol=0,
+    )
+
+
+def test_upstream_panel_is_opt_in_and_preserves_legacy_order():
+    legacy_order, _ = comparison_panel_configuration(
+        {name: object() for name in ("heat", "varadhan", "malliavin")}
+    )
+    upstream_order, titles = comparison_panel_configuration(
+        {
+            name: object()
+            for name in ("upstream", "heat", "varadhan", "malliavin")
+        }
+    )
+
+    assert legacy_order == ("observed", "heat", "varadhan", "malliavin")
+    assert upstream_order == (
+        "observed",
+        "upstream",
+        "heat",
+        "varadhan",
+        "malliavin",
+    )
+    assert titles["upstream"] == "Upstream"
 
 
 def test_metrics_comparison_uses_final_train_loss_fallback(tmp_path):
@@ -150,6 +216,12 @@ def test_postprocess_generates_global_zoom_density_and_overlay_paths(
         return {"output_path": path, "pdf_path": pdf_path}
 
     def fake_scatter(**kwargs):
+        assert kwargs["panel_order"] == (
+            "observed",
+            "heat",
+            "varadhan",
+            "malliavin",
+        )
         calls.append(("scatter", kwargs.get("geographic_extent")))
         return save_pair(kwargs["output_path"])
 
@@ -158,6 +230,12 @@ def test_postprocess_generates_global_zoom_density_and_overlay_paths(
         return save_pair(kwargs["output_path"])
 
     def fake_density(**kwargs):
+        assert kwargs["panel_order"] == (
+            "observed",
+            "heat",
+            "varadhan",
+            "malliavin",
+        )
         global_result = save_pair(kwargs["global_output_path"])
         bandwidth_result = save_pair(kwargs["bandwidth_comparison_path"])
         return {
@@ -204,4 +282,85 @@ def test_postprocess_generates_global_zoom_density_and_overlay_paths(
         ("scatter", None),
         ("scatter", japan_extent),
         ("overlay", japan_extent),
+    ]
+
+
+def test_postprocess_passes_optional_upstream_panel_to_scatter_and_density(
+    tmp_path,
+    monkeypatch,
+):
+    upstream_path = tmp_path / "generated_samples.npy"
+    np.save(
+        upstream_path,
+        np.array([[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0]], dtype=np.float64),
+    )
+    generated = {
+        teacher: torch.ones(2, 3, dtype=torch.float64)
+        for teacher in ("heat", "varadhan", "malliavin")
+    }
+    monkeypatch.setattr(
+        postprocess,
+        "load_saved_scatter_artifacts",
+        lambda run_dirs: (torch.ones(2, 3, dtype=torch.float64), generated),
+    )
+
+    expected_order = (
+        "observed",
+        "upstream",
+        "heat",
+        "varadhan",
+        "malliavin",
+    )
+    calls = []
+
+    def fake_scatter(**kwargs):
+        calls.append(("scatter", kwargs["panel_order"], tuple(kwargs["generated_by_teacher"])))
+        return {"output_path": kwargs["output_path"], "pdf_path": None}
+
+    def fake_density(**kwargs):
+        calls.append(("density", kwargs["panel_order"], tuple(kwargs["generated_by_teacher"])))
+        return {
+            "global_output_path": kwargs["global_output_path"],
+            "global_pdf_path": None,
+            "bandwidth_comparison_path": kwargs["bandwidth_comparison_path"],
+            "bandwidth_pdf_path": None,
+        }
+
+    def fake_overlay(**kwargs):
+        return {"output_path": kwargs["output_path"], "pdf_path": None}
+
+    fake_viz = types.ModuleType("scoremodel_ext.manifold.earthquake_smoke_viz")
+    fake_viz.generate_earthquake_scatter_comparison = fake_scatter
+    fake_viz.generate_earthquake_density_bandwidth_outputs = fake_density
+    fake_viz.generate_earthquake_malliavin_overlay = fake_overlay
+    monkeypatch.setitem(
+        sys.modules,
+        "scoremodel_ext.manifold.earthquake_smoke_viz",
+        fake_viz,
+    )
+    monkeypatch.setattr(
+        postprocess,
+        "save_metrics_comparison",
+        lambda run_dirs, output_path: {},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "postprocess_earthquake_teacher_comparison.py",
+            "--upstream-samples",
+            str(upstream_path),
+            "--upstream-coordinate-system",
+            UPSTREAM_ANTIPODAL_COORDINATES,
+            "--comparison-dir",
+            str(tmp_path / "comparison"),
+        ],
+    )
+
+    postprocess.main()
+
+    assert calls == [
+        ("scatter", expected_order, ("upstream", "heat", "varadhan", "malliavin")),
+        ("scatter", expected_order, ("upstream", "heat", "varadhan", "malliavin")),
+        ("density", expected_order, ("upstream", "heat", "varadhan", "malliavin")),
     ]

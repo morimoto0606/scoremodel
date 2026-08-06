@@ -22,6 +22,13 @@ from .earthquake_viz_utils import (
 
 DENSITY_TEACHER_ORDER = ("heat", "varadhan", "malliavin")
 SCATTER_PANEL_ORDER = ("observed", *DENSITY_TEACHER_ORDER)
+DEFAULT_PANEL_TITLES = {
+    "observed": "Observed",
+    "upstream": "Upstream",
+    "heat": "Heat",
+    "varadhan": "Varadhan",
+    "malliavin": "Malliavin",
+}
 
 
 def _to_numpy(points: torch.Tensor | np.ndarray) -> np.ndarray:
@@ -36,6 +43,25 @@ def _stable_subsample(points: np.ndarray, n: int) -> np.ndarray:
     return points[:n]
 
 
+def _resolve_comparison_panels(
+    generated_by_method: Mapping[str, torch.Tensor | np.ndarray],
+    panel_order: Sequence[str] | None,
+    panel_titles: Mapping[str, str] | None,
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    resolved_order = tuple(SCATTER_PANEL_ORDER if panel_order is None else panel_order)
+    if not resolved_order or resolved_order[0] != "observed":
+        raise ValueError("panel_order must begin with 'observed'")
+    if len(set(resolved_order)) != len(resolved_order):
+        raise ValueError("panel_order must not contain duplicates")
+    missing = [name for name in resolved_order[1:] if name not in generated_by_method]
+    if missing:
+        raise ValueError(f"missing generated samples for panels: {missing}")
+    resolved_titles = dict(DEFAULT_PANEL_TITLES)
+    if panel_titles is not None:
+        resolved_titles.update(panel_titles)
+    return resolved_order, resolved_titles
+
+
 def generate_earthquake_scatter_comparison(
     *,
     observed_points: torch.Tensor | np.ndarray,
@@ -48,24 +74,24 @@ def generate_earthquake_scatter_comparison(
     view_lat: float = 30.0,
     geographic_extent: tuple[float, float, float, float] | None = None,
     save_pdf: bool = True,
+    panel_order: Sequence[str] | None = None,
+    panel_titles: Mapping[str, str] | None = None,
 ) -> dict:
-    """Save one fixed-projection Observed/Heat/Varadhan/Malliavin scatter figure."""
+    """Save a shared-projection scatter comparison with optional extra methods."""
 
-    missing = [
-        teacher
-        for teacher in DENSITY_TEACHER_ORDER
-        if teacher not in generated_by_teacher
-    ]
-    if missing:
-        raise ValueError(f"missing generated samples for teachers: {missing}")
+    resolved_order, resolved_titles = _resolve_comparison_panels(
+        generated_by_teacher,
+        panel_order,
+        panel_titles,
+    )
     if max_points < 1:
         raise ValueError("max_points must be positive")
 
     panels = {"observed": _to_numpy(observed_points)}
     panels.update(
         {
-            teacher: _to_numpy(generated_by_teacher[teacher])
-            for teacher in DENSITY_TEACHER_ORDER
+            method: _to_numpy(generated_by_teacher[method])
+            for method in resolved_order[1:]
         }
     )
     for name, points in panels.items():
@@ -82,22 +108,16 @@ def generate_earthquake_scatter_comparison(
         for name, points in panels.items()
     }
 
-    titles = {
-        "observed": "Observed",
-        "heat": "Heat",
-        "varadhan": "Varadhan",
-        "malliavin": "Malliavin",
-    }
     projection = (
         ccrs.Orthographic(view_lon, view_lat)
         if geographic_extent is None
         else ccrs.PlateCarree()
     )
-    fig = plt.figure(figsize=(20, 5), dpi=300)
-    for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
+    fig = plt.figure(figsize=(5 * len(resolved_order), 5), dpi=300)
+    for index, panel_name in enumerate(resolved_order, start=1):
         ax = fig.add_subplot(
             1,
-            4,
+            len(resolved_order),
             index,
             projection=projection,
             frameon=True,
@@ -114,7 +134,7 @@ def generate_earthquake_scatter_comparison(
             c="#d95f02",
             alpha=alpha,
         )
-        ax.set_title(titles[panel_name])
+        ax.set_title(resolved_titles.get(panel_name, panel_name.title()))
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,7 +145,7 @@ def generate_earthquake_scatter_comparison(
         fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     return {
-        "panel_order": SCATTER_PANEL_ORDER,
+        "panel_order": resolved_order,
         "displayed_count_per_panel": displayed_count,
         "marker_size": marker_size,
         "alpha": alpha,
@@ -289,27 +309,27 @@ def generate_earthquake_density_comparison(
     view_lon: float = 70.0,
     view_lat: float = 30.0,
     save_pdf: bool = True,
+    panel_order: Sequence[str] | None = None,
+    panel_titles: Mapping[str, str] | None = None,
 ) -> dict:
-    """Save only the fixed four-panel density comparison."""
+    """Save a density comparison with an optional extra-method panel."""
 
-    missing = [
-        teacher
-        for teacher in DENSITY_TEACHER_ORDER
-        if teacher not in generated_by_teacher
-    ]
-    if missing:
-        raise ValueError(f"missing generated samples for teachers: {missing}")
+    resolved_order, resolved_titles = _resolve_comparison_panels(
+        generated_by_teacher,
+        panel_order,
+        panel_titles,
+    )
 
     panels = {"observed": _to_numpy(observed_points)}
     panels.update(
         {
-            teacher: _to_numpy(generated_by_teacher[teacher])
-            for teacher in DENSITY_TEACHER_ORDER
+            method: _to_numpy(generated_by_teacher[method])
+            for method in resolved_order[1:]
         }
     )
     densities: Dict[str, np.ndarray] = {}
     lat = lon = None
-    for panel_name in SCATTER_PANEL_ORDER:
+    for panel_name in resolved_order:
         density, panel_lat, panel_lon = spherical_kde_density_on_grid(
             panels[panel_name],
             grid_size,
@@ -319,20 +339,14 @@ def generate_earthquake_density_comparison(
         if lat is None:
             lat, lon = panel_lat, panel_lon
 
-    titles = {
-        "observed": "Observed",
-        "heat": "Heat",
-        "varadhan": "Varadhan",
-        "malliavin": "Malliavin",
-    }
     levels = np.linspace(0.0, 1.0, 220)
     density_cmap = density_overlay_cmap()
     projection = ccrs.Orthographic(view_lon, view_lat)
-    fig = plt.figure(figsize=(20, 5), dpi=300)
-    for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
+    fig = plt.figure(figsize=(5 * len(resolved_order), 5), dpi=300)
+    for index, panel_name in enumerate(resolved_order, start=1):
         ax = fig.add_subplot(
             1,
-            4,
+            len(resolved_order),
             index,
             projection=projection,
             frameon=True,
@@ -349,7 +363,7 @@ def generate_earthquake_density_comparison(
             extend="both",
             zorder=2,
         )
-        ax.set_title(titles[panel_name])
+        ax.set_title(resolved_titles.get(panel_name, panel_name.title()))
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -360,8 +374,8 @@ def generate_earthquake_density_comparison(
         fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     return {
-        "panel_order": SCATTER_PANEL_ORDER,
-        "n_columns": 4,
+        "panel_order": resolved_order,
+        "n_columns": len(resolved_order),
         "output_path": output_path,
         "pdf_path": pdf_path,
     }
@@ -379,6 +393,8 @@ def generate_earthquake_density_bandwidth_outputs(
     view_lon: float = 70.0,
     view_lat: float = 30.0,
     save_pdf: bool = True,
+    panel_order: Sequence[str] | None = None,
+    panel_titles: Mapping[str, str] | None = None,
 ) -> dict:
     """Save the sharper global density and current-vs-scaled bandwidth grid.
 
@@ -389,15 +405,17 @@ def generate_earthquake_density_bandwidth_outputs(
 
     if not 0.0 < bandwidth_scale <= 1.0:
         raise ValueError("bandwidth_scale must lie in (0, 1]")
-    missing = [name for name in DENSITY_TEACHER_ORDER if name not in generated_by_teacher]
-    if missing:
-        raise ValueError(f"missing generated samples for teachers: {missing}")
+    resolved_order, resolved_titles = _resolve_comparison_panels(
+        generated_by_teacher,
+        panel_order,
+        panel_titles,
+    )
 
     panels = {"observed": _to_numpy(observed_points)}
     panels.update(
         {
-            teacher: _to_numpy(generated_by_teacher[teacher])
-            for teacher in DENSITY_TEACHER_ORDER
+            method: _to_numpy(generated_by_teacher[method])
+            for method in resolved_order[1:]
         }
     )
     scaled_kappa = base_kappa / bandwidth_scale**2
@@ -406,7 +424,7 @@ def generate_earthquake_density_bandwidth_outputs(
         "scaled": {},
     }
     lat = lon = None
-    for panel_name in SCATTER_PANEL_ORDER:
+    for panel_name in resolved_order:
         current, panel_lat, panel_lon = spherical_kde_density_on_grid(
             panels[panel_name], grid_size, base_kappa
         )
@@ -418,12 +436,6 @@ def generate_earthquake_density_bandwidth_outputs(
         if lat is None:
             lat, lon = panel_lat, panel_lon
 
-    titles = {
-        "observed": "Observed",
-        "heat": "Heat",
-        "varadhan": "Varadhan",
-        "malliavin": "Malliavin",
-    }
     levels = np.linspace(0.0, 1.0, 220)
     density_cmap = density_overlay_cmap()
     projection = ccrs.Orthographic(view_lon, view_lat)
@@ -445,10 +457,20 @@ def generate_earthquake_density_bandwidth_outputs(
 
     global_output_path = Path(global_output_path)
     global_output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig = plt.figure(figsize=(20, 5), dpi=300)
-    for index, panel_name in enumerate(SCATTER_PANEL_ORDER, start=1):
-        ax = fig.add_subplot(1, 4, index, projection=projection, frameon=True)
-        draw_panel(ax, density_sets["scaled"][panel_name], titles[panel_name])
+    fig = plt.figure(figsize=(5 * len(resolved_order), 5), dpi=300)
+    for index, panel_name in enumerate(resolved_order, start=1):
+        ax = fig.add_subplot(
+            1,
+            len(resolved_order),
+            index,
+            projection=projection,
+            frameon=True,
+        )
+        draw_panel(
+            ax,
+            density_sets["scaled"][panel_name],
+            resolved_titles.get(panel_name, panel_name.title()),
+        )
     fig.tight_layout()
     fig.savefig(global_output_path, dpi=300, bbox_inches="tight")
     global_pdf_path = global_output_path.with_suffix(".pdf") if save_pdf else None
@@ -457,22 +479,22 @@ def generate_earthquake_density_bandwidth_outputs(
     plt.close(fig)
 
     bandwidth_comparison_path = Path(bandwidth_comparison_path)
-    fig = plt.figure(figsize=(20, 10), dpi=300)
+    fig = plt.figure(figsize=(5 * len(resolved_order), 10), dpi=300)
     for row, (set_name, row_title) in enumerate(
         (("current", "Current bandwidth"), ("scaled", f"Bandwidth × {bandwidth_scale:g}"))
     ):
-        for column, panel_name in enumerate(SCATTER_PANEL_ORDER):
+        for column, panel_name in enumerate(resolved_order):
             ax = fig.add_subplot(
                 2,
-                4,
-                row * 4 + column + 1,
+                len(resolved_order),
+                row * len(resolved_order) + column + 1,
                 projection=projection,
                 frameon=True,
             )
             draw_panel(
                 ax,
                 density_sets[set_name][panel_name],
-                f"{titles[panel_name]} — {row_title}",
+                f"{resolved_titles.get(panel_name, panel_name.title())} — {row_title}",
             )
     fig.tight_layout()
     fig.savefig(bandwidth_comparison_path, dpi=300, bbox_inches="tight")
@@ -490,6 +512,7 @@ def generate_earthquake_density_bandwidth_outputs(
         "base_kappa": base_kappa,
         "scaled_kappa": scaled_kappa,
         "bandwidth_scale": bandwidth_scale,
+        "panel_order": resolved_order,
     }
 
 
