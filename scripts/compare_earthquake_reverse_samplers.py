@@ -48,6 +48,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="also run the upstream N=100, epsilon=0.001 parameterisation",
     )
+    parser.add_argument(
+        "--upstream-score-input",
+        choices=("raw-network-output", "effective-score"),
+        default="raw-network-output",
+        help=(
+            "raw-network-output reproduces upstream's /std wrapper; "
+            "effective-score uses a scoremodel_ext output that already represents score"
+        ),
+    )
     args = parser.parse_args()
     if args.max_points < 1:
         parser.error("--max-points must be positive")
@@ -128,6 +137,10 @@ def _trace_summary(trace: S2ReverseSamplerDiagnostics) -> list[dict[str, object]
                 ),
                 "drift_increment_norm": _summary(trace.drift_increment_norm[step]),
                 "noise_increment_norm": _summary(trace.noise_increment_norm[step]),
+                "drift_noise_ratio": _summary(
+                    trace.drift_increment_norm[step]
+                    / trace.noise_increment_norm[step].clamp_min(1e-12)
+                ),
                 "score_std": _summary(trace.score_std[step]),
             }
         )
@@ -273,6 +286,9 @@ def main() -> None:
                 terminal_time=1.0,
                 epsilon=UPSTREAM_REVERSE_EPSILON,
                 n_steps=UPSTREAM_REVERSE_STEPS,
+                divide_network_output_by_std=(
+                    args.upstream_score_input == "raw-network-output"
+                ),
             )
             if args.upstream_style_reverse
             else None
@@ -303,6 +319,7 @@ def main() -> None:
         "reverse_steps": UPSTREAM_REVERSE_STEPS,
         "terminal_time": 1.0,
         "epsilon": UPSTREAM_REVERSE_EPSILON,
+        "upstream_score_input": args.upstream_score_input,
         "current_trace_matches_production_atol": 1e-12,
         "current_style": _trace_summary(current),
         "upstream_style": None,

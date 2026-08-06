@@ -311,16 +311,29 @@ def _report_label(report: Mapping[str, object], fallback: str) -> str:
 
 def save_plot(reports: Sequence[Mapping[str, object]], output_path: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(13, 5), dpi=220)
-    colors = {
-        "raw_score_norm": "#4c78a8",
-        "projected_score_norm": "#f58518",
-        "sigma_squared_projected_score_norm": "#54a24b",
-    }
+    metric_candidates = (
+        ("network output", ("raw_score_norm", "network_output_norm"), "#4c78a8"),
+        ("projected score", ("projected_score_norm",), "#f58518"),
+        (
+            "beta*projected score",
+            (
+                "sigma_squared_projected_score_norm",
+                "beta_projected_score_norm",
+            ),
+            "#54a24b",
+        ),
+    )
     for report_index, report in enumerate(reports):
         rows = report["time_statistics"]
         times = [float(row["time"]) for row in rows]
         label = _report_label(report, f"report-{report_index + 1}")
-        for metric, color in colors.items():
+        for metric_label, candidates, color in metric_candidates:
+            metric = next(
+                (candidate for candidate in candidates if candidate in rows[0]),
+                None,
+            )
+            if metric is None:
+                continue
             means = [float(row[metric]["mean"]) for row in rows]
             linestyle = "-" if report_index == 0 else "--"
             axes[0].plot(
@@ -329,18 +342,29 @@ def save_plot(reports: Sequence[Mapping[str, object]], output_path: Path) -> Non
                 marker="o",
                 linestyle=linestyle,
                 color=color,
-                label=f"{label}: {metric}",
+                label=f"{label}: {metric_label}",
             )
 
         reverse_rows = report.get("reverse_statistics") or []
         if reverse_rows:
-            reverse_times = [float(row["physical_time"]) for row in reverse_rows]
-            effective = [
-                float(row["sigma_squared_projected_score_norm"]["mean"])
+            reverse_times = [
+                float(row["physical_time"] if "physical_time" in row else row["time"])
                 for row in reverse_rows
             ]
+            effective_key = (
+                "sigma_squared_projected_score_norm"
+                if "sigma_squared_projected_score_norm" in reverse_rows[0]
+                else "beta_projected_score_norm"
+            )
+            effective = [float(row[effective_key]["mean"]) for row in reverse_rows]
             increment = [
-                float(row["score_drift_increment_norm"]["mean"])
+                float(
+                    row[
+                        "score_drift_increment_norm"
+                        if "score_drift_increment_norm" in row
+                        else "drift_increment_norm"
+                    ]["mean"]
+                )
                 for row in reverse_rows
             ]
             noise_increment = [

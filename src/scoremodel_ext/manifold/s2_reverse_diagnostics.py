@@ -205,6 +205,7 @@ def s2_reverse_grw_upstream_style(
     terminal_time: float = 1.0,
     epsilon: float = UPSTREAM_REVERSE_EPSILON,
     n_steps: int = UPSTREAM_REVERSE_STEPS,
+    divide_network_output_by_std: bool = True,
 ) -> S2ReverseSamplerDiagnostics:
     r"""Run the upstream Earthquake reverse-SDE/GRW discretisation.
 
@@ -251,7 +252,11 @@ def s2_reverse_grw_upstream_style(
         time_batch = time_grid[step].expand(points.shape[0])
         network_output = network_output_fn(time_batch, points)
         score_std = upstream_score_standard_deviation(time_batch, beta_schedule)
-        score = network_output / score_std[:, None]
+        score = (
+            network_output / score_std[:, None]
+            if divide_network_output_by_std
+            else network_output
+        )
         projector = _batched_s2_projector(points)
         projected_score = torch.einsum("bij,bj->bi", projector, score)
         projected_noise = torch.einsum(

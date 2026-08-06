@@ -171,3 +171,29 @@ def test_upstream_style_uses_endpoint_inclusive_score_time_grid():
     )
     expected = torch.linspace(1.0, 0.001, steps=4, dtype=DTYPE)
     torch.testing.assert_close(result.time_grid, expected, rtol=0, atol=0)
+
+
+def test_upstream_style_can_accept_an_already_parameterised_effective_score():
+    terminal = torch.tensor([[0.0, 0.0, 1.0]], dtype=DTYPE)
+    noise = torch.zeros(1, 1, 3, dtype=DTYPE)
+    effective_score = torch.tensor([[0.1, 0.2, 0.0]], dtype=DTYPE)
+
+    def score_fn(t, x):
+        return effective_score.expand_as(x)
+
+    result = s2_reverse_grw_upstream_style(
+        terminal,
+        score_fn,
+        standard_noise=noise,
+        beta_schedule=None,
+        terminal_time=1.0,
+        epsilon=0.5,
+        n_steps=1,
+        divide_network_output_by_std=False,
+    )
+    torch.testing.assert_close(
+        result.score_norm,
+        torch.linalg.vector_norm(effective_score, dim=1).reshape(1, 1),
+        rtol=0,
+        atol=0,
+    )
