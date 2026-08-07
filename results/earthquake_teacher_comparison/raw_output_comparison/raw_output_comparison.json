@@ -1,0 +1,126 @@
+{
+  "upstream_checkpoint": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_heat/ckpt",
+  "ext_checkpoint": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat/model.pt",
+  "sample_count": 4096,
+  "comparison": "N_up(x,t) vs sigma(t) * ext_effective_score(x,t)",
+  "results": [
+    {
+      "t": 0.001,
+      "sigma": 0.0018706934213790125,
+      "cosine_similarity": 0.025409777079310157,
+      "cosine_similarity_std": 0.6111800790858484,
+      "cosine_similarity_min": -0.999509572469891,
+      "relative_l2_error": 1.000952450675808,
+      "norm_ratio": 0.05671504297956633,
+      "upstream_raw_output_l2_norm": 52.09063215407556,
+      "scaled_ext_score_l2_norm": 2.954322441451232
+    },
+    {
+      "t": 0.01,
+      "sigma": 0.016121917253423924,
+      "cosine_similarity": 0.03300617039620064,
+      "cosine_similarity_std": 0.6129102822614009,
+      "cosine_similarity_min": -0.9999676405590286,
+      "relative_l2_error": 1.1220101308121637,
+      "norm_ratio": 0.5225286312114937,
+      "upstream_raw_output_l2_norm": 56.3602581881218,
+      "scaled_ext_score_l2_norm": 29.449848565766185
+    },
+    {
+      "t": 0.05,
+      "sigma": 0.07923985397774684,
+      "cosine_similarity": -0.008089028386900383,
+      "cosine_similarity_std": 0.6164529173414751,
+      "cosine_similarity_min": -0.999862423316508,
+      "relative_l2_error": 1.659534595317077,
+      "norm_ratio": 1.2931384149216314,
+      "upstream_raw_output_l2_norm": 72.09110199851865,
+      "scaled_ext_score_l2_norm": 93.22377336831934
+    },
+    {
+      "t": 0.1,
+      "sigma": 0.15742534107431183,
+      "cosine_similarity": -0.017726675938444597,
+      "cosine_similarity_std": 0.6222338955731063,
+      "cosine_similarity_min": -0.999891304988608,
+      "relative_l2_error": 2.634213489211329,
+      "norm_ratio": 2.4570617432145423,
+      "upstream_raw_output_l2_norm": 81.07522872060622,
+      "scaled_ext_score_l2_norm": 199.20684281177287
+    },
+    {
+      "t": 0.5,
+      "sigma": 0.6818645443824155,
+      "cosine_similarity": -0.289880097716106,
+      "cosine_similarity_std": 0.5470767719251288,
+      "cosine_similarity_min": -0.9993913616721457,
+      "relative_l2_error": 2.5771594392672275,
+      "norm_ratio": 2.245001596136411,
+      "upstream_raw_output_l2_norm": 28.855849637669177,
+      "scaled_ext_score_l2_norm": 64.78142849444183
+    },
+    {
+      "t": 0.9,
+      "sigma": 0.9317035352494483,
+      "cosine_similarity": -0.40686809281659786,
+      "cosine_similarity_std": 0.5016404104693831,
+      "cosine_similarity_min": -0.9999281111712576,
+      "relative_l2_error": 2.7655324332040117,
+      "norm_ratio": 2.212205817139229,
+      "upstream_raw_output_l2_norm": 7.690032484346124,
+      "scaled_ext_score_l2_norm": 17.011934595862346
+    },
+    {
+      "t": 1.0,
+      "sigma": 0.9581002210711039,
+      "cosine_similarity": -0.3844636968203009,
+      "cosine_similarity_std": 0.4975887463019489,
+      "cosine_similarity_min": -0.9998479684833087,
+      "relative_l2_error": 3.3599985728725965,
+      "norm_ratio": 2.873706523371747,
+      "upstream_raw_output_l2_norm": 5.108336415914623,
+      "scaled_ext_score_l2_norm": 14.679859681994177
+    }
+  ],
+  "metadata": {
+    "evaluation_times": [
+      0.001,
+      0.01,
+      0.05,
+      0.1,
+      0.5,
+      0.9,
+      1.0
+    ],
+    "sample_seed": 0,
+    "data_path": "/home/r0700008/scoremodel/upstream/riemannian-score-sde/data/quakes_all.csv",
+    "input_coordinate_policy": "identical standard-earth xyz passed to both models",
+    "upstream_parameter_source": "params_ema",
+    "upstream_quantity": "raw network output N_up(x,t)",
+    "ext_quantity": "sqrt(1-exp(-tau(t))) * effective_score(x,t)",
+    "beta_schedule": {
+      "type": "linear",
+      "beta_0": 0.001,
+      "beta_f": 5.0,
+      "t0": 0.0,
+      "tf": 1.0
+    },
+    "metric_epsilon": 1e-12,
+    "reverse_sampler_used": false,
+    "upstream_checkpoint_metadata": {
+      "checkpoint_step": 100000,
+      "ema_rate": 0.999,
+      "parameter_source": "params_ema",
+      "checkpoint_array_count": 53,
+      "network_architecture": "upstream DivFreeGenerator/Concat",
+      "hidden_shapes": [
+        512,
+        512,
+        512,
+        512,
+        512
+      ],
+      "config_dtype": "float64"
+    }
+  }
+}

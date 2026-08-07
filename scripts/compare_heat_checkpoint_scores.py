@@ -56,7 +56,7 @@ DEFAULT_DATA_PATH = Path("upstream/riemannian-score-sde/data/quakes_all.csv")
 DEFAULT_OUTPUT_DIR = Path(
     "results/earthquake_teacher_comparison/score_field_comparison"
 )
-EVALUATION_TIMES = (0.001, 0.01, 0.05, 0.1, 0.5, 0.9, 1.0)
+EVALUATION_TIMES = (0.001, 0.01, 0.05, 0.1, 0.3, 0.5, 0.9, 1.0)
 SAMPLE_COUNT = 4096
 METRIC_EPSILON = 1e-12
 

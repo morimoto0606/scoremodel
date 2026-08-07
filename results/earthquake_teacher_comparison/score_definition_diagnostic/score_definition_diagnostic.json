@@ -1,0 +1,3912 @@
+{
+  "purpose": "diagnose Upstream/ext Heat score-definition mismatch",
+  "inference_only": true,
+  "reverse_sampler_used": false,
+  "upstream_checkpoint": "/home/r0700008/scoremodel/results/earthquake_teacher_comparison/upstream_heat/ckpt",
+  "ext_checkpoint": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat/model.pt",
+  "data_path": "/home/r0700008/scoremodel/upstream/riemannian-score-sde/data/quakes_all.csv",
+  "sample_count": 4096,
+  "sample_seed": 0,
+  "evaluation_times": [
+    0.001,
+    0.01,
+    0.05,
+    0.1,
+    0.5,
+    0.9,
+    1.0
+  ],
+  "coordinate_definition": {
+    "ext_training_coordinates": "standard-earth xyz",
+    "upstream_training_coordinates": "antipodal xyz = -standard-earth xyz",
+    "coordinate_norm_scaling_factor": 1.0,
+    "coordinate_sign": -1.0,
+    "tangent_vector_transform": "v_upstream = -v_standard",
+    "same_numeric_xyz": "both networks receive x_standard",
+    "coordinate_aligned": "ext receives x_standard; Upstream receives -x_standard and its output is negated"
+  },
+  "ext_normalization_buffers": {
+    "x_mean": [
+      [
+        0.037445301408986234,
+        0.10226689569390357,
+        0.1926605580211337
+      ]
+    ],
+    "x_std": [
+      [
+        0.5625674584055242,
+        0.5970253133391878,
+        0.5275719007160565
+      ]
+    ],
+    "t_mean": [
+      [
+        0.5033891292455923
+      ]
+    ],
+    "t_std": [
+      [
+        0.2882442932098884
+      ]
+    ],
+    "y_mean": [
+      [
+        0.0649495098904775,
+        -0.047591603072850895,
+        0.48566599125803894
+      ]
+    ],
+    "y_std": [
+      [
+        5.748065535124896,
+        17.878786547031797,
+        6.010933260764643
+      ]
+    ]
+  },
+  "parameterization_evidence": {
+    "same_numeric_xyz": {
+      "ext_is_effective_score_mean_raw_equivalence_error": 2.1599144444800307,
+      "ext_is_sigma_times_score_mean_raw_equivalence_error": 14.957664819592596,
+      "lower_error_hypothesis": "ext_output_is_effective_score",
+      "interpretation_warning": "This is empirical checkpoint evidence; architecture and training-target differences can prevent either error from being small."
+    },
+    "coordinate_aligned": {
+      "ext_is_effective_score_mean_raw_equivalence_error": 2.996012397916357,
+      "ext_is_sigma_times_score_mean_raw_equivalence_error": 35.3436941074358,
+      "lower_error_hypothesis": "ext_output_is_effective_score",
+      "interpretation_warning": "This is empirical checkpoint evidence; architecture and training-target differences can prevent either error from being small."
+    }
+  },
+  "results": [
+    {
+      "t": 0.001,
+      "sigma": 0.0018706934213790125,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 1.9725773496773318,
+            "std": 1.77090180649998,
+            "min": 0.048925247905089,
+            "max": 29.13550643234261
+          },
+          "global_l2_norm": 169.6561972853845,
+          "x_dot_score": {
+            "mean": -0.026666900731935173,
+            "std": 1.3104369170093955,
+            "min": -9.355275465183148,
+            "max": 11.033340099950562
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.7720842506766462,
+            "std": 1.0591704050401058,
+            "min": 8.954377533271218e-05,
+            "max": 11.033340099950562
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 16.126663634323975,
+            "std": 18.6771841350195,
+            "min": 0.2948470362949265,
+            "max": 414.0497450857556
+          },
+          "global_l2_norm": 1579.2659597174427,
+          "x_dot_score": {
+            "mean": -0.6216598421096742,
+            "std": 15.240567806319948,
+            "min": -143.17703938212054,
+            "max": 143.51003362504915
+          },
+          "absolute_x_dot_score": {
+            "mean": 7.432381700293449,
+            "std": 13.3199500854722,
+            "min": 0.0006759480623874659,
+            "max": 143.51003362504915
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 12.821095375346633,
+            "std": 14.555570498815532,
+            "min": 0.11995201179590431,
+            "max": 413.7162844078339
+          },
+          "global_l2_norm": 1241.4104913843726,
+          "x_dot_score": {
+            "mean": 1.2598535619708336e-17,
+            "std": 2.2889429183376286e-15,
+            "min": -2.4868995751603507e-14,
+            "max": 3.552713678800501e-14
+          },
+          "absolute_x_dot_score": {
+            "mean": 1.0270709177142094e-15,
+            "std": 2.0456157352968605e-15,
+            "min": 0.0,
+            "max": 3.552713678800501e-14
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 14.587470462402834,
+              "std": 17.860003082307152,
+              "min": 0.46200700832454394,
+              "max": 239.01586182562943
+            },
+            "global_l2_norm": 1475.854438217659,
+            "x_dot_score": {
+              "mean": -0.8878092255901121,
+              "std": 15.185284993607139,
+              "min": -212.91659871058118,
+              "max": 127.80901084232073
+            },
+            "absolute_x_dot_score": {
+              "mean": 7.503583208489194,
+              "std": 13.23167882739723,
+              "min": 0.0009625671591768636,
+              "max": 212.91659871058118
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 11.277802478666112,
+              "std": 13.160702499698672,
+              "min": 0.10164115202159012,
+              "max": 126.24828101163634
+            },
+            "global_l2_norm": 1109.238205418806,
+            "x_dot_score": {
+              "mean": 4.812319089896291e-17,
+              "std": 2.2841141540122164e-15,
+              "min": -2.7533531010703882e-14,
+              "max": 3.9190872769268026e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 9.899883719759684e-16,
+              "std": 2.058984296543783e-15,
+              "min": 0.0,
+              "max": 3.9190872769268026e-14
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": 0.9334813290557725,
+              "std": 0.05655034047876691,
+              "min": 0.31678319514132736,
+              "max": 0.9999982146179944
+            },
+            "relative_l2_error": 8.456595553806267,
+            "norm_ratio": 9.308625237313883,
+            "least_squares_coordinate_scaling_factor": 8.068247724050702,
+            "residual_after_scalar_fit": 0.4987434545867844
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.840894283327525,
+              "std": 0.20392261887970897,
+              "min": 0.0700049529594883,
+              "max": 0.9999999980745288
+            },
+            "relative_l2_error": 0.6181399863072783,
+            "norm_ratio": 0.7860680360681498,
+            "least_squares_coordinate_scaling_factor": 0.6179029573280379,
+            "residual_after_scalar_fit": 0.6181399863072784
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.03671246660216117,
+              "std": 0.5901359910435777,
+              "min": -0.9988943329526406,
+              "max": 0.9991121500139343
+            },
+            "relative_l2_error": 1.391370293467139,
+            "norm_ratio": 0.9345192487285127,
+            "least_squares_coordinate_scaling_factor": -0.03129253364936476,
+            "residual_after_scalar_fit": 0.9994392145359388
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.445092850471795e-17,
+              "min": 0.9999999999999997,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.9981293065786211,
+            "norm_ratio": 0.001870693421379011,
+            "least_squares_coordinate_scaling_factor": 0.0018706934213790125,
+            "residual_after_scalar_fit": 0.0
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": -1.7429282767439636,
+            "std": 8.881784197001252e-16,
+            "min": -1.7429282767439627,
+            "max": -1.7429282767439627
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 0.6944936112241169,
+              "std": 0.42442677392312816,
+              "min": 0.004172893203562611,
+              "max": 1.8670991931707306
+            },
+            "global_l2_norm": 52.09063215407556,
+            "x_dot_score": {
+              "mean": -3.2886794762290387e-19,
+              "std": 1.695442818898566e-17,
+              "min": -1.6653345369377348e-16,
+              "max": 1.6653345369377348e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 8.394057668575418e-18,
+              "std": 1.473433355123587e-17,
+              "min": 0.0,
+              "max": 1.6653345369377348e-16
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 371.24929359732255,
+              "std": 226.88205831731358,
+              "min": 2.230666530321411,
+              "max": 998.0786652867831
+            },
+            "global_l2_norm": 27845.62748698616,
+            "x_dot_score": {
+              "mean": 2.619219102301389e-17,
+              "std": 1.4587876101458003e-14,
+              "min": -9.947598300641403e-14,
+              "max": 8.526512829121202e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 9.256579573730352e-15,
+              "std": 1.1274863625673766e-14,
+              "min": 0.0,
+              "max": 9.947598300641403e-14
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.701328688121327e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 533.561135764734,
+            "norm_ratio": 534.5611357647344,
+            "least_squares_coordinate_scaling_factor": 534.561135764744,
+            "residual_after_scalar_fit": 2.5783746107232996e-16
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.2647124777348227,
+              "std": 0.18770347399963805,
+              "min": 0.01055353972741793,
+              "max": 1.6874139220747768
+            },
+            "global_l2_norm": 20.76849700681518,
+            "x_dot_score": {
+              "mean": 1.0969971055980512e-19,
+              "std": 8.812466248244606e-18,
+              "min": -5.551115123125783e-17,
+              "max": 9.020562075079397e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 3.907208974993788e-18,
+              "std": 7.899703375992772e-18,
+              "min": 0.0,
+              "max": 9.020562075079397e-17
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 141.5050027490264,
+              "std": 100.33898224823443,
+              "min": 5.641512183026877,
+              "max": 902.0259026895341
+            },
+            "global_l2_norm": 11102.031348089813,
+            "x_dot_score": {
+              "mean": -2.639809943853549e-17,
+              "std": 7.454528238845751e-15,
+              "min": -5.684341886080802e-14,
+              "max": 5.684341886080802e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 4.304994661838738e-15,
+              "std": 6.0858614086211914e-15,
+              "min": 0.0,
+              "max": 5.684341886080802e-14
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.025409777079310157,
+                "std": 0.6111800790858484,
+                "min": -0.999509572469891,
+                "max": 0.9999181937516062
+              },
+              "relative_l2_error": 1.000952450675808,
+              "norm_ratio": 0.05671504297956633,
+              "least_squares_coordinate_scaling_factor": 0.0006553937931153558,
+              "residual_after_scalar_fit": 0.999933228270829
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.025409777079310164,
+                "std": 0.6111800790858484,
+                "min": -0.9995095724698908,
+                "max": 0.9999181937516064
+              },
+              "relative_l2_error": 30.3225935199641,
+              "norm_ratio": 30.31765779010326,
+              "least_squares_coordinate_scaling_factor": 0.35034805042090844,
+              "residual_after_scalar_fit": 0.9999332282711668
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.025409777079310157,
+                "std": 0.6111800790858485,
+                "min": -0.9995095724698909,
+                "max": 0.9999181937516062
+              },
+              "relative_l2_error": 1.0009524506758258,
+              "norm_ratio": 0.05671504297956737,
+              "least_squares_coordinate_scaling_factor": 0.0006553937931153563,
+              "residual_after_scalar_fit": 0.9999332282711668
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.025409777079310164,
+                "std": 0.6111800790858484,
+                "min": -0.9995095724698908,
+                "max": 0.9999181937516061
+              },
+              "relative_l2_error": 30.322593519964638,
+              "norm_ratio": 30.317657790103844,
+              "least_squares_coordinate_scaling_factor": 0.35034805042090844,
+              "residual_after_scalar_fit": 0.9999332282711658
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.02930160382278459,
+                "std": 0.7075530225859821,
+                "min": -0.9999998464707319,
+                "max": 0.9999999892834761
+              },
+              "relative_l2_error": 1.000338321097715,
+              "norm_ratio": 0.044581882450469255,
+              "least_squares_coordinate_scaling_factor": 0.0006553937931153564,
+              "residual_after_scalar_fit": 0.9998919359315308
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 8.687484083189725e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 3.480612965479741e-17,
+              "norm_ratio": 1.0,
+              "least_squares_coordinate_scaling_factor": 1.0,
+              "residual_after_scalar_fit": 3.480612965479741e-17
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.840894283327525,
+                "std": 0.20392261887970897,
+                "min": 0.0700049529594883,
+                "max": 0.9999999980745288
+              },
+              "relative_l2_error": 0.6181399863072783,
+              "norm_ratio": 0.7860680360681498,
+              "least_squares_coordinate_scaling_factor": 0.6179029573280379,
+              "residual_after_scalar_fit": 0.6181399863072784
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.048730866719370575,
+                "std": 0.6164233750034555,
+                "min": -0.9997944408289516,
+                "max": 0.999658565492458
+              },
+              "relative_l2_error": 1.0075550698707774,
+              "norm_ratio": 0.14225018018788885,
+              "least_squares_coordinate_scaling_factor": 0.0025339474705420224,
+              "residual_after_scalar_fit": 0.9998413302906781
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.048730866719370575,
+                "std": 0.6164233750034556,
+                "min": -0.999794440828952,
+                "max": 0.9996585654924582
+              },
+              "relative_l2_error": 76.03017910099933,
+              "norm_ratio": 76.04141788397739,
+              "least_squares_coordinate_scaling_factor": 1.3545498378211445,
+              "residual_after_scalar_fit": 0.9998413302910161
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.04873086671937058,
+                "std": 0.6164233750034556,
+                "min": -0.9997944408289519,
+                "max": 0.999658565492458
+              },
+              "relative_l2_error": 1.0075550698708255,
+              "norm_ratio": 0.1422501801878957,
+              "least_squares_coordinate_scaling_factor": 0.002533947470542029,
+              "residual_after_scalar_fit": 0.9998413302910161
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.048730866719370575,
+                "std": 0.6164233750034556,
+                "min": -0.9997944408289522,
+                "max": 0.9996585654924582
+              },
+              "relative_l2_error": 76.03017910100301,
+              "norm_ratio": 76.0414178839811,
+              "least_squares_coordinate_scaling_factor": 1.3545498378211476,
+              "residual_after_scalar_fit": 0.9998413302910155
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.049272274181204605,
+                "std": 0.7119003889597567,
+                "min": -0.9999980431388659,
+                "max": 0.9999999946242869
+              },
+              "relative_l2_error": 1.0037108356968376,
+              "norm_ratio": 0.11181831977063965,
+              "least_squares_coordinate_scaling_factor": 0.002533947470542029,
+              "residual_after_scalar_fit": 0.9997431999745964
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.39957638400606e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.489437138452927e-17,
+              "norm_ratio": 0.9999999999999999,
+              "least_squares_coordinate_scaling_factor": 1.0,
+              "residual_after_scalar_fit": 4.489437138452927e-17
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.840894283327525,
+                "std": 0.20392261887970897,
+                "min": 0.0700049529594883,
+                "max": 0.9999999980745288
+              },
+              "relative_l2_error": 0.6181399863072783,
+              "norm_ratio": 0.7860680360681498,
+              "least_squares_coordinate_scaling_factor": 0.6179029573280379,
+              "residual_after_scalar_fit": 0.6181399863072784
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 0.01,
+      "sigma": 0.016121917253423924,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 1.9440653512817065,
+            "std": 2.099519142931005,
+            "min": 0.05846087499813429,
+            "max": 35.13540759791712
+          },
+          "global_l2_norm": 183.1269244967099,
+          "x_dot_score": {
+            "mean": -0.05611504401199546,
+            "std": 1.3720929556795696,
+            "min": -13.552522424355733,
+            "max": 16.13097547546361
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.7606129387412968,
+            "std": 1.1433529352782055,
+            "min": 0.00017308142793837078,
+            "max": 16.13097547546361
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 15.848046212757406,
+            "std": 23.738001333892665,
+            "min": 0.41926844392545426,
+            "max": 500.92864684703375
+          },
+          "global_l2_norm": 1826.6964221957983,
+          "x_dot_score": {
+            "mean": -0.9415576084728137,
+            "std": 14.549825710084505,
+            "min": -213.05502901449552,
+            "max": 185.95284404566343
+          },
+          "absolute_x_dot_score": {
+            "mean": 6.7591968342722915,
+            "std": 12.91887058064571,
+            "min": 0.002581040630678322,
+            "max": 213.05502901449552
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 12.98581321808377,
+            "std": 20.819173187970623,
+            "min": 0.1261574505963433,
+            "max": 500.92078404770325
+          },
+          "global_l2_norm": 1570.3744531514135,
+          "x_dot_score": {
+            "mean": 9.13714358712364e-17,
+            "std": 2.4725866194610112e-15,
+            "min": -5.684341886080802e-14,
+            "max": 3.019806626980426e-14
+          },
+          "absolute_x_dot_score": {
+            "mean": 9.90015582909399e-16,
+            "std": 2.267576343946714e-15,
+            "min": 0.0,
+            "max": 5.684341886080802e-14
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 13.510983045909503,
+              "std": 16.75846454005741,
+              "min": 0.25383808674900454,
+              "max": 170.99436490630637
+            },
+            "global_l2_norm": 1377.6998566099776,
+            "x_dot_score": {
+              "mean": -0.8591632467962629,
+              "std": 13.707468179257337,
+              "min": -129.3940794559381,
+              "max": 90.28789369197284
+            },
+            "absolute_x_dot_score": {
+              "mean": 6.9756548536148,
+              "std": 11.831022133917191,
+              "min": 0.0008634209834947892,
+              "max": 129.3940794559381
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 10.374687547346804,
+              "std": 12.9277147838334,
+              "min": 0.09289925806696882,
+              "max": 162.7391719321163
+            },
+            "global_l2_norm": 1060.8566162623686,
+            "x_dot_score": {
+              "mean": -5.900457980353058e-18,
+              "std": 1.866480316022064e-15,
+              "min": -2.6645352591003757e-14,
+              "max": 2.842170943040401e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 8.68323729188468e-16,
+              "std": 1.6522098797763196e-15,
+              "min": 0.0,
+              "max": 2.842170943040401e-14
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": 0.9340370070773656,
+              "std": 0.05309670272559791,
+              "min": 0.454113138626117,
+              "max": 0.9999933463984849
+            },
+            "relative_l2_error": 9.126102425119534,
+            "norm_ratio": 9.975029216572723,
+            "least_squares_coordinate_scaling_factor": 8.607731198853514,
+            "residual_after_scalar_fit": 0.5053270302188994
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.8439458569688005,
+              "std": 0.19850956635535696,
+              "min": 0.007782949711064015,
+              "max": 0.9999999974197352
+            },
+            "relative_l2_error": 0.510832877726687,
+            "norm_ratio": 0.8596800399180334,
+            "least_squares_coordinate_scaling_factor": 0.7390497710334714,
+            "residual_after_scalar_fit": 0.510832877726687
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.01760099151339138,
+              "std": 0.5805056089565859,
+              "min": -0.9996173394147875,
+              "max": 0.9989262958494506
+            },
+            "relative_l2_error": 1.2470470111601129,
+            "norm_ratio": 0.7542029643622443,
+            "least_squares_coordinate_scaling_factor": 0.006847931704713997,
+            "residual_after_scalar_fit": 0.9999587787339592
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.283191067987946e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.9838780827465757,
+            "norm_ratio": 0.016121917253423913,
+            "least_squares_coordinate_scaling_factor": 0.016121917253423924,
+            "residual_after_scalar_fit": 0.0
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": -1.7117047617880343,
+            "std": 2.220446049250313e-16,
+            "min": -1.711704761788034,
+            "max": -1.711704761788034
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 0.7613861194416032,
+              "std": 0.4424914383115429,
+              "min": 0.0061292431191593555,
+              "max": 1.9171549839737687
+            },
+            "global_l2_norm": 56.3602581881218,
+            "x_dot_score": {
+              "mean": 2.802083372311331e-20,
+              "std": 1.8434341456389416e-17,
+              "min": -1.6653345369377348e-16,
+              "max": 1.5265566588595902e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 9.796711193702825e-18,
+              "std": 1.5615702990420827e-17,
+              "min": 0.0,
+              "max": 1.6653345369377348e-16
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 47.226772565149,
+              "std": 27.446576691588426,
+              "min": 0.380180782645913,
+              "max": 118.91606648499632
+            },
+            "global_l2_norm": 3495.878145395656,
+            "x_dot_score": {
+              "mean": -4.749393723620096e-17,
+              "std": 1.8994688841242243e-15,
+              "min": -1.0658141036401503e-14,
+              "max": 1.2434497875801753e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.223801296155307e-15,
+              "std": 1.4534607333391879e-15,
+              "min": 0.0,
+              "max": 1.2434497875801753e-14
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.237653663772775e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 61.02736214810964,
+            "norm_ratio": 62.02736214810966,
+            "least_squares_coordinate_scaling_factor": 62.0273621481107,
+            "residual_after_scalar_fit": 1.542645451688906e-16
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.3024411622934829,
+              "std": 0.20364887209091098,
+              "min": 0.007798785399562424,
+              "max": 1.8056138241120951
+            },
+            "global_l2_norm": 23.335309231069814,
+            "x_dot_score": {
+              "mean": -3.7477860419461364e-19,
+              "std": 1.0693383439333341e-17,
+              "min": -1.457167719820518e-16,
+              "max": 7.632783294297951e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 4.682281629202373e-18,
+              "std": 9.62107827260593e-18,
+              "min": 0.0,
+              "max": 1.457167719820518e-16
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 18.75962750207339,
+              "std": 12.631802340237206,
+              "min": 0.48373808629405673,
+              "max": 111.99746256783598
+            },
+            "global_l2_norm": 1447.4276765137183,
+            "x_dot_score": {
+              "mean": -1.3497670192205514e-17,
+              "std": 1.0537080923929836e-15,
+              "min": -7.105427357601002e-15,
+              "max": 7.549516567451064e-15
+            },
+            "absolute_x_dot_score": {
+              "mean": 5.910730025005027e-16,
+              "std": 8.724194156425553e-16,
+              "min": 0.0,
+              "max": 7.549516567451064e-15
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.03300617039620064,
+                "std": 0.6129102822614009,
+                "min": -0.9999676405590286,
+                "max": 0.9999008222890177
+              },
+              "relative_l2_error": 1.1220101308121637,
+              "norm_ratio": 0.5225286312114937,
+              "least_squares_coordinate_scaling_factor": 0.0070647183952974105,
+              "residual_after_scalar_fit": 0.999908597225386
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.03300617039620064,
+                "std": 0.6129102822614009,
+                "min": -0.9999676405590288,
+                "max": 0.9999008222890177
+              },
+              "relative_l2_error": 32.41297916023319,
+              "norm_ratio": 32.41107264091191,
+              "least_squares_coordinate_scaling_factor": 0.438205846379532,
+              "residual_after_scalar_fit": 0.9999085972254205
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.03300617039620064,
+                "std": 0.6129102822614009,
+                "min": -0.9999676405590288,
+                "max": 0.9999008222890178
+              },
+              "relative_l2_error": 1.1220101308121824,
+              "norm_ratio": 0.5225286312115025,
+              "least_squares_coordinate_scaling_factor": 0.007064718395297413,
+              "residual_after_scalar_fit": 0.9999085972254205
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.033006170396200636,
+                "std": 0.6129102822614009,
+                "min": -0.9999676405590285,
+                "max": 0.9999008222890177
+              },
+              "relative_l2_error": 32.41297916023372,
+              "norm_ratio": 32.41107264091247,
+              "least_squares_coordinate_scaling_factor": 0.43820584637953214,
+              "residual_after_scalar_fit": 0.9999085972254202
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.035460668353581505,
+                "std": 0.7063727422556588,
+                "min": -0.9999994288481665,
+                "max": 0.9999967789377556
+              },
+              "relative_l2_error": 1.0897971749155038,
+              "norm_ratio": 0.44920743453822004,
+              "least_squares_coordinate_scaling_factor": 0.0070647183952974165,
+              "residual_after_scalar_fit": 0.9998763219294842
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.172734840025485e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 3.6056579169049865e-17,
+              "norm_ratio": 0.9999999999999998,
+              "least_squares_coordinate_scaling_factor": 1.0,
+              "residual_after_scalar_fit": 3.6056579169049865e-17
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8439458569688005,
+                "std": 0.19850956635535696,
+                "min": 0.007782949711064015,
+                "max": 0.9999999974197352
+              },
+              "relative_l2_error": 0.510832877726687,
+              "norm_ratio": 0.8596800399180334,
+              "least_squares_coordinate_scaling_factor": 0.7390497710334714,
+              "residual_after_scalar_fit": 0.510832877726687
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.04477666266352802,
+                "std": 0.6041146818607848,
+                "min": -0.9995323054882228,
+                "max": 0.9995529451308874
+              },
+              "relative_l2_error": 1.5922711897651685,
+              "norm_ratio": 1.2620294967659527,
+              "least_squares_coordinate_scaling_factor": 0.028695454475531432,
+              "residual_after_scalar_fit": 0.9997414685683425
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.04477666266352802,
+                "std": 0.6041146818607848,
+                "min": -0.9995323054882228,
+                "max": 0.9995529451308873
+              },
+              "relative_l2_error": 78.26400868115239,
+              "norm_ratio": 78.28036063749967,
+              "least_squares_coordinate_scaling_factor": 1.779903346758412,
+              "residual_after_scalar_fit": 0.999741468568376
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.044776662663528026,
+                "std": 0.6041146818607848,
+                "min": -0.9995323054882227,
+                "max": 0.9995529451308873
+              },
+              "relative_l2_error": 1.592271189765235,
+              "norm_ratio": 1.262029496766006,
+              "least_squares_coordinate_scaling_factor": 0.02869545447553149,
+              "residual_after_scalar_fit": 0.999741468568376
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.04477666266352802,
+                "std": 0.6041146818607847,
+                "min": -0.9995323054882227,
+                "max": 0.9995529451308872
+              },
+              "relative_l2_error": 78.26400868115563,
+              "norm_ratio": 78.28036063750302,
+              "least_squares_coordinate_scaling_factor": 1.779903346758416,
+              "residual_after_scalar_fit": 0.9997414685683754
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.045190908898915846,
+                "std": 0.6956898673858908,
+                "min": -0.9999976035401056,
+                "max": 0.999999683197001
+              },
+              "relative_l2_error": 1.4559214598889145,
+              "norm_ratio": 1.084941568157536,
+              "least_squares_coordinate_scaling_factor": 0.02869545447553148,
+              "residual_after_scalar_fit": 0.9996501680321778
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.849808168106981e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 5.0853226952537195e-17,
+              "norm_ratio": 0.9999999999999993,
+              "least_squares_coordinate_scaling_factor": 1.0000000000000002,
+              "residual_after_scalar_fit": 2.239418069747857e-16
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8439458569688005,
+                "std": 0.19850956635535696,
+                "min": 0.007782949711064015,
+                "max": 0.9999999974197352
+              },
+              "relative_l2_error": 0.510832877726687,
+              "norm_ratio": 0.8596800399180334,
+              "least_squares_coordinate_scaling_factor": 0.7390497710334714,
+              "residual_after_scalar_fit": 0.510832877726687
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 0.05,
+      "sigma": 0.07923985397774684,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 1.566039490950912,
+            "std": 1.5770823496875512,
+            "min": 0.036075663973558256,
+            "max": 16.742957133628764
+          },
+          "global_l2_norm": 142.24233500771467,
+          "x_dot_score": {
+            "mean": 0.003070527866625248,
+            "std": 1.0075036240366597,
+            "min": -8.960157406720512,
+            "max": 8.720426047939892
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.5899047093921757,
+            "std": 0.816752970258032,
+            "min": 3.3902139879041227e-05,
+            "max": 8.960157406720512
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 11.92160880720143,
+            "std": 13.99246786902413,
+            "min": 0.14830996763701856,
+            "max": 151.4421187868985
+          },
+          "global_l2_norm": 1176.4758349314916,
+          "x_dot_score": {
+            "mean": -0.13371096983684422,
+            "std": 11.047371301839787,
+            "min": -133.48034471427093,
+            "max": 120.3028679114903
+          },
+          "absolute_x_dot_score": {
+            "mean": 5.1138709249638055,
+            "std": 9.793396523524292,
+            "min": 0.0009832692952701505,
+            "max": 133.48034471427093
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 9.78693798159009,
+            "std": 10.95753016231109,
+            "min": 0.03160248012001616,
+            "max": 114.60649283981034
+          },
+          "global_l2_norm": 940.2809393983704,
+          "x_dot_score": {
+            "mean": 5.1126548045522495e-17,
+            "std": 1.7102438213078208e-15,
+            "min": -1.7569279364693102e-14,
+            "max": 2.1316282072803006e-14
+          },
+          "absolute_x_dot_score": {
+            "mean": 7.416771396989608e-16,
+            "std": 1.541902355106992e-15,
+            "min": 0.0,
+            "max": 2.1316282072803006e-14
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 10.811292371021668,
+              "std": 13.553944677503763,
+              "min": 0.21627536158431332,
+              "max": 139.56579305093237
+            },
+            "global_l2_norm": 1109.6084031221192,
+            "x_dot_score": {
+              "mean": -0.5654812675855354,
+              "std": 10.905164045910015,
+              "min": -127.50708913276155,
+              "max": 110.71165374945906
+            },
+            "absolute_x_dot_score": {
+              "mean": 5.200219214456714,
+              "std": 9.602087900753359,
+              "min": 0.0010422400582809077,
+              "max": 127.50708913276155
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 8.579577103220787,
+              "std": 10.379881687679967,
+              "min": 0.05749272175759252,
+              "max": 112.77830620804843
+            },
+            "global_l2_norm": 861.8666096589034,
+            "x_dot_score": {
+              "mean": 2.583456941134394e-17,
+              "std": 1.8486151412908286e-15,
+              "min": -2.5202062658991053e-14,
+              "max": 3.552713678800501e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 7.247517356187315e-16,
+              "std": 1.7008175349825215e-15,
+              "min": 0.0,
+              "max": 3.552713678800501e-14
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": 0.9339136683200809,
+              "std": 0.05557755847569117,
+              "min": 0.4633863804007491,
+              "max": 0.9999984309922069
+            },
+            "relative_l2_error": 7.403446254953329,
+            "norm_ratio": 8.270926056350776,
+            "least_squares_coordinate_scaling_factor": 7.298600689820011,
+            "residual_after_scalar_fit": 0.47042389751929
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.8468472471178622,
+              "std": 0.19621515156272004,
+              "min": 0.020965071922481735,
+              "max": 0.9999999886354968
+            },
+            "relative_l2_error": 0.6010183362426453,
+            "norm_ratio": 0.7992352341458199,
+            "least_squares_coordinate_scaling_factor": 0.6387769595001228,
+            "residual_after_scalar_fit": 0.6010183362426442
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.01520477438945784,
+              "std": 0.5810473382404873,
+              "min": -0.9990386274763436,
+              "max": 0.9998384921386653
+            },
+            "relative_l2_error": 1.377904609945896,
+            "norm_ratio": 0.9431629364378172,
+            "least_squares_coordinate_scaling_factor": -0.004532394720073458,
+            "residual_after_scalar_fit": 0.999988453389668
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.404014646543975e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.9207601460222539,
+            "norm_ratio": 0.07923985397774691,
+            "least_squares_coordinate_scaling_factor": 0.07923985397774684,
+            "residual_after_scalar_fit": 0.0
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": -1.5729335842061296,
+            "std": 0.0,
+            "min": -1.5729335842061296,
+            "max": -1.5729335842061296
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 1.0197267223367457,
+              "std": 0.4785261149101443,
+              "min": 0.035015647441155234,
+              "max": 2.051897204194603
+            },
+            "global_l2_norm": 72.09110199851865,
+            "x_dot_score": {
+              "mean": -2.9751308489271316e-19,
+              "std": 2.520057863282452e-17,
+              "min": -2.0990154059319366e-16,
+              "max": 1.6653345369377348e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.3739740669361248e-17,
+              "std": 2.1127640753372815e-17,
+              "min": 0.0,
+              "max": 2.0990154059319366e-16
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 12.86886170465582,
+              "std": 6.0389575559355535,
+              "min": 0.4418943963600537,
+              "max": 25.89476256191541
+            },
+            "global_l2_norm": 909.7833776771498,
+            "x_dot_score": {
+              "mean": -9.639276298784566e-19,
+              "std": 5.354318672668357e-16,
+              "min": -2.9976021664879227e-15,
+              "max": 3.3306690738754696e-15
+            },
+            "absolute_x_dot_score": {
+              "mean": 3.481200022133329e-16,
+              "std": 4.068177450656853e-16,
+              "min": 0.0,
+              "max": 3.3306690738754696e-15
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.173475083826478e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 11.619912200757224,
+            "norm_ratio": 12.619912200757199,
+            "least_squares_coordinate_scaling_factor": 12.619912200757375,
+            "residual_after_scalar_fit": 1.4863388949710837e-16
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.3968942830804678,
+              "std": 0.24290597519819568,
+              "min": 0.011060969203888353,
+              "max": 1.7467840430291146
+            },
+            "global_l2_norm": 29.78087077050901,
+            "x_dot_score": {
+              "mean": -7.268194092174282e-19,
+              "std": 1.454163550247358e-17,
+              "min": -1.1102230246251565e-16,
+              "max": 1.1102230246251565e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 6.294388891806177e-18,
+              "std": 1.3128903153696931e-17,
+              "min": 0.0,
+              "max": 1.1102230246251565e-16
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 5.008771005458046,
+              "std": 3.065452080040576,
+              "min": 0.1395884602083522,
+              "max": 22.04426125671142
+            },
+            "global_l2_norm": 375.8319743859252,
+            "x_dot_score": {
+              "mean": -1.0319710934767623e-17,
+              "std": 2.838571938377128e-16,
+              "min": -1.7763568394002505e-15,
+              "max": 1.7763568394002505e-15
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.6146751755390986e-16,
+              "std": 2.336870636175253e-16,
+              "min": 0.0,
+              "max": 1.7763568394002505e-15
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": -0.008089028386900383,
+                "std": 0.6164529173414751,
+                "min": -0.999862423316508,
+                "max": 0.9999687702267949
+              },
+              "relative_l2_error": 1.659534595317077,
+              "norm_ratio": 1.2931384149216314,
+              "least_squares_coordinate_scaling_factor": -0.040924056454109424,
+              "residual_after_scalar_fit": 0.9994991056773497
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": -0.008089028386900385,
+                "std": 0.6164529173414751,
+                "min": -0.999862423316508,
+                "max": 0.999968770226795
+              },
+              "relative_l2_error": 16.381460511688644,
+              "norm_ratio": 16.319293259737517,
+              "least_squares_coordinate_scaling_factor": -0.516457999349699,
+              "residual_after_scalar_fit": 0.9994991056773608
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": -0.00808902838690038,
+                "std": 0.6164529173414751,
+                "min": -0.9998624233165082,
+                "max": 0.9999687702267951
+              },
+              "relative_l2_error": 1.6595345953170983,
+              "norm_ratio": 1.2931384149216454,
+              "least_squares_coordinate_scaling_factor": -0.040924056454109424,
+              "residual_after_scalar_fit": 0.9994991056773608
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": -0.00808902838690038,
+                "std": 0.6164529173414752,
+                "min": -0.9998624233165081,
+                "max": 0.9999687702267948
+              },
+              "relative_l2_error": 16.38146051168885,
+              "norm_ratio": 16.319293259737748,
+              "least_squares_coordinate_scaling_factor": -0.5164579993496992,
+              "residual_after_scalar_fit": 0.9994991056773604
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": -0.012043391073169159,
+                "std": 0.7083460466367291,
+                "min": -0.9999997744568095,
+                "max": 0.9999997738225003
+              },
+              "relative_l2_error": 1.466293077991322,
+              "norm_ratio": 1.0335217838328565,
+              "least_squares_coordinate_scaling_factor": -0.040924056454109424,
+              "residual_after_scalar_fit": 0.999215742975051
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.205483015737869e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 3.751370016893349e-17,
+              "norm_ratio": 0.9999999999999989,
+              "least_squares_coordinate_scaling_factor": 1.0,
+              "residual_after_scalar_fit": 3.751370016893349e-17
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8468472471178622,
+                "std": 0.19621515156272004,
+                "min": 0.020965071922481735,
+                "max": 0.9999999886354968
+              },
+              "relative_l2_error": 0.6010183362426453,
+              "norm_ratio": 0.7992352341458199,
+              "least_squares_coordinate_scaling_factor": 0.6387769595001228,
+              "residual_after_scalar_fit": 0.6010183362426442
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.019228516769892585,
+                "std": 0.6193350399028237,
+                "min": -0.999815448230475,
+                "max": 0.9991870364485141
+              },
+              "relative_l2_error": 3.2775282149153337,
+              "norm_ratio": 3.1303239615354888,
+              "least_squares_coordinate_scaling_factor": 0.02836845229852963,
+              "residual_after_scalar_fit": 0.9999589350181093
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.019228516769892588,
+                "std": 0.6193350399028239,
+                "min": -0.999815448230475,
+                "max": 0.999187036448514
+              },
+              "relative_l2_error": 39.50800773932785,
+              "norm_ratio": 39.50441355450481,
+              "least_squares_coordinate_scaling_factor": 0.35800737727881776,
+              "residual_after_scalar_fit": 0.999958935018121
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.019228516769892585,
+                "std": 0.6193350399028238,
+                "min": -0.999815448230475,
+                "max": 0.9991870364485141
+              },
+              "relative_l2_error": 3.2775282149154337,
+              "norm_ratio": 3.130323961535581,
+              "least_squares_coordinate_scaling_factor": 0.028368452298529676,
+              "residual_after_scalar_fit": 0.999958935018121
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.01922851676989258,
+                "std": 0.6193350399028237,
+                "min": -0.999815448230475,
+                "max": 0.9991870364485143
+              },
+              "relative_l2_error": 39.50800773932905,
+              "norm_ratio": 39.50441355450609,
+              "least_squares_coordinate_scaling_factor": 0.35800737727881815,
+              "residual_after_scalar_fit": 0.99995893501812
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.007777123390483757,
+                "std": 0.7112641350229025,
+                "min": -0.999999970934906,
+                "max": 0.9999999055916934
+              },
+              "relative_l2_error": 2.6837646312858747,
+              "norm_ratio": 2.501865204350162,
+              "least_squares_coordinate_scaling_factor": 0.02836845229852967,
+              "residual_after_scalar_fit": 0.9999357123670422
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.386761686317387e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 5.3106064631962567e-17,
+              "norm_ratio": 0.9999999999999974,
+              "least_squares_coordinate_scaling_factor": 1.0000000000000002,
+              "residual_after_scalar_fit": 2.2655214994685056e-16
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8468472471178622,
+                "std": 0.19621515156272004,
+                "min": 0.020965071922481735,
+                "max": 0.9999999886354968
+              },
+              "relative_l2_error": 0.6010183362426453,
+              "norm_ratio": 0.7992352341458199,
+              "least_squares_coordinate_scaling_factor": 0.6387769595001228,
+              "residual_after_scalar_fit": 0.6010183362426442
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 0.1,
+      "sigma": 0.15742534107431183,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 1.2268796588017392,
+            "std": 1.631316458890637,
+            "min": 0.020065902067686995,
+            "max": 23.381938956302207
+          },
+          "global_l2_norm": 130.63569705556685,
+          "x_dot_score": {
+            "mean": 0.0015089785933112441,
+            "std": 0.8646750807339704,
+            "min": -7.59201130530063,
+            "max": 10.933336908628306
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.44806475591416906,
+            "std": 0.7395290709406014,
+            "min": 6.457266303988574e-05,
+            "max": 10.933336908628306
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 9.738699165368132,
+            "std": 17.207207301494517,
+            "min": 0.07987509474314315,
+            "max": 329.50652727506684
+          },
+          "global_l2_norm": 1265.4051847836765,
+          "x_dot_score": {
+            "mean": -0.23436744461428963,
+            "std": 8.621247014913251,
+            "min": -124.28646200992735,
+            "max": 114.72639094360362
+          },
+          "absolute_x_dot_score": {
+            "mean": 3.7945845272128738,
+            "std": 7.744801899150304,
+            "min": 0.0005189656640564033,
+            "max": 124.28646200992735
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 8.217157216281024,
+            "std": 15.780612904504808,
+            "min": 0.04853797612999028,
+            "max": 329.0603229084477
+          },
+          "global_l2_norm": 1138.677482611327,
+          "x_dot_score": {
+            "mean": 3.533376350057326e-17,
+            "std": 1.3925041085091108e-15,
+            "min": -1.4210854715202004e-14,
+            "max": 3.552713678800501e-14
+          },
+          "absolute_x_dot_score": {
+            "mean": 5.621723748249871e-16,
+            "std": 1.2744718074722956e-15,
+            "min": 0.0,
+            "max": 3.552713678800501e-14
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 7.952152225614674,
+              "std": 10.980614258657742,
+              "min": 0.329270074298798,
+              "max": 110.62875107111367
+            },
+            "global_l2_norm": 867.6913489604212,
+            "x_dot_score": {
+              "mean": -0.2247700893333744,
+              "std": 8.268549828995775,
+              "min": -99.19693741719561,
+              "max": 83.10160807228756
+            },
+            "absolute_x_dot_score": {
+              "mean": 3.7739745870535444,
+              "std": 7.360472381846099,
+              "min": 2.1715761621576846e-05,
+              "max": 99.19693741719561
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 6.341492645588643,
+              "std": 8.670446797892597,
+              "min": 0.07116653590760816,
+              "max": 109.73762708429425
+            },
+            "global_l2_norm": 687.4898250555285,
+            "x_dot_score": {
+              "mean": 5.091464753364356e-17,
+              "std": 1.4105851493944114e-15,
+              "min": -1.4210854715202004e-14,
+              "max": 2.4868995751603507e-14
+            },
+            "absolute_x_dot_score": {
+              "mean": 5.314710212780578e-16,
+              "std": 1.307624303294728e-15,
+              "min": 0.0,
+              "max": 2.4868995751603507e-14
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": 0.927524298803108,
+              "std": 0.07490842541468429,
+              "min": -0.6799902476170169,
+              "max": 0.9999843576955524
+            },
+            "relative_l2_error": 8.837399776367539,
+            "norm_ratio": 9.686519177414558,
+            "least_squares_coordinate_scaling_factor": 8.364509483539583,
+            "residual_after_scalar_fit": 0.5043134548820368
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.8489729379739116,
+              "std": 0.19207058735911497,
+              "min": 0.011771658936893229,
+              "max": 0.9999999835974831
+            },
+            "relative_l2_error": 0.4361951870122003,
+            "norm_ratio": 0.899852076081058,
+            "least_squares_coordinate_scaling_factor": 0.8097337588273913,
+            "residual_after_scalar_fit": 0.43619518701220045
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.01343672601368048,
+              "std": 0.5830864577037489,
+              "min": -0.9998334799867397,
+              "max": 0.9995231267930372
+            },
+            "relative_l2_error": 1.2165603585530207,
+            "norm_ratio": 0.6857023816515768,
+            "least_squares_coordinate_scaling_factor": -0.004915674900005812,
+            "residual_after_scalar_fit": 0.9999743037011597
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.487745105870878e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.8425746589256873,
+            "norm_ratio": 0.15742534107431172,
+            "least_squares_coordinate_scaling_factor": 0.1574253410743118,
+            "residual_after_scalar_fit": 1.8762399327381679e-16
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": -1.399469612228749,
+            "std": 2.220446049250313e-16,
+            "min": -1.3994696122287489,
+            "max": -1.3994696122287489
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 1.1559573479609062,
+              "std": 0.518214228550692,
+              "min": 0.04268468561809673,
+              "max": 2.1745853648352567
+            },
+            "global_l2_norm": 81.07522872060622,
+            "x_dot_score": {
+              "mean": 3.361566883645061e-19,
+              "std": 3.141739438435456e-17,
+              "min": -2.3592239273284576e-16,
+              "max": 2.255140518769849e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.8434172832129595e-17,
+              "std": 2.5443013642576962e-17,
+              "min": 0.0,
+              "max": 2.3592239273284576e-16
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 7.342892447126682,
+              "std": 3.2918094699002256,
+              "min": 0.27114240519858646,
+              "max": 13.813439119746006
+            },
+            "global_l2_norm": 515.0074833398968,
+            "x_dot_score": {
+              "mean": -4.757758422128416e-18,
+              "std": 3.388692183823285e-16,
+              "min": -1.887379141862766e-15,
+              "max": 1.5543122344752192e-15
+            },
+            "absolute_x_dot_score": {
+              "mean": 2.2780705030172173e-16,
+              "std": 2.509161837448468e-16,
+              "min": 0.0,
+              "max": 1.887379141862766e-15
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.526655581212258e-17,
+              "min": 0.9999999999999997,
+              "max": 1.0
+            },
+            "relative_l2_error": 5.352217458610712,
+            "norm_ratio": 6.3522174586107,
+            "least_squares_coordinate_scaling_factor": 6.3522174586107765,
+            "residual_after_scalar_fit": 2.2540267030225214e-16
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.3772697931745955,
+              "std": 0.24834075523661228,
+              "min": 0.009969257456350366,
+              "max": 1.9789883803831723
+            },
+            "global_l2_norm": 28.90686856889045,
+            "x_dot_score": {
+              "mean": -1.268437525380026e-19,
+              "std": 1.3270488866279693e-17,
+              "min": -1.1102230246251565e-16,
+              "max": 1.1102230246251565e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 5.674101091402476e-18,
+              "std": 1.199693881338686e-17,
+              "min": 0.0,
+              "max": 1.1102230246251565e-16
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 2.3964997668101433,
+              "std": 1.5775144810985906,
+              "min": 0.06332689126361447,
+              "max": 12.570964540257853
+            },
+            "global_l2_norm": 183.62271519707312,
+            "x_dot_score": {
+              "mean": -5.480853243842671e-19,
+              "std": 1.329215883537997e-16,
+              "min": -1.7763568394002505e-15,
+              "max": 1.1657341758564144e-15
+            },
+            "absolute_x_dot_score": {
+              "mean": 7.182939522929616e-17,
+              "std": 1.118435828691794e-16,
+              "min": 0.0,
+              "max": 1.7763568394002505e-15
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": -0.017726675938444597,
+                "std": 0.6222338955731063,
+                "min": -0.999891304988608,
+                "max": 0.999350152843174
+              },
+              "relative_l2_error": 2.634213489211329,
+              "norm_ratio": 2.4570617432145423,
+              "least_squares_coordinate_scaling_factor": 0.049035851612766156,
+              "residual_after_scalar_fit": 0.9998008370462496
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": -0.0177266759384446,
+                "std": 0.6222338955731063,
+                "min": -0.999891304988608,
+                "max": 0.9993501528431742
+              },
+              "relative_l2_error": 15.61986400622675,
+              "norm_ratio": 15.607790502132046,
+              "least_squares_coordinate_scaling_factor": 0.3114863927124607,
+              "residual_after_scalar_fit": 0.9998008370462531
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": -0.017726675938444597,
+                "std": 0.6222338955731063,
+                "min": -0.999891304988608,
+                "max": 0.9993501528431741
+              },
+              "relative_l2_error": 2.6342134892113562,
+              "norm_ratio": 2.457061743214567,
+              "least_squares_coordinate_scaling_factor": 0.049035851612766176,
+              "residual_after_scalar_fit": 0.9998008370462531
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": -0.0177266759384446,
+                "std": 0.6222338955731063,
+                "min": -0.999891304988608,
+                "max": 0.9993501528431743
+              },
+              "relative_l2_error": 15.619864006226916,
+              "norm_ratio": 15.6077905021322,
+              "least_squares_coordinate_scaling_factor": 0.31148639271246076,
+              "residual_after_scalar_fit": 0.9998008370462544
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": -0.025791008659938462,
+                "std": 0.7119655905799961,
+                "min": -0.9999999909712706,
+                "max": 0.9999999999826279
+              },
+              "relative_l2_error": 2.4063279930866015,
+              "norm_ratio": 2.2109921106909733,
+              "least_squares_coordinate_scaling_factor": 0.049035851612766176,
+              "residual_after_scalar_fit": 0.9997540332078984
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.283607327506308e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.2604524166116544e-17,
+              "norm_ratio": 0.999999999999998,
+              "least_squares_coordinate_scaling_factor": 1.0,
+              "residual_after_scalar_fit": 4.2604524166116544e-17
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8489729379739116,
+                "std": 0.19207058735911497,
+                "min": 0.011771658936893229,
+                "max": 0.9999999835974831
+              },
+              "relative_l2_error": 0.4361951870122003,
+              "norm_ratio": 0.899852076081058,
+              "least_squares_coordinate_scaling_factor": 0.8097337588273913,
+              "residual_after_scalar_fit": 0.43619518701220045
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.10655059920081628,
+                "std": 0.6128513747227724,
+                "min": -0.9999579481626658,
+                "max": 0.9999111932743637
+              },
+              "relative_l2_error": 6.932909917135673,
+              "norm_ratio": 6.891332498953285,
+              "least_squares_coordinate_scaling_factor": 0.2126118460058129,
+              "residual_after_scalar_fit": 0.9995239617014097
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.10655059920081628,
+                "std": 0.6128513747227724,
+                "min": -0.9999579481626658,
+                "max": 0.9999111932743637
+              },
+              "relative_l2_error": 43.755808214016575,
+              "norm_ratio": 43.7752426129429,
+              "least_squares_coordinate_scaling_factor": 1.3505566801055908,
+              "residual_after_scalar_fit": 0.9995239617014149
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.10655059920081628,
+                "std": 0.6128513747227724,
+                "min": -0.9999579481626657,
+                "max": 0.9999111932743636
+              },
+              "relative_l2_error": 6.932909917135862,
+              "norm_ratio": 6.891332498953483,
+              "least_squares_coordinate_scaling_factor": 0.2126118460058132,
+              "residual_after_scalar_fit": 0.9995239617014149
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.10655059920081628,
+                "std": 0.6128513747227723,
+                "min": -0.9999579481626655,
+                "max": 0.9999111932743635
+              },
+              "relative_l2_error": 43.75580821401785,
+              "norm_ratio": 43.77524261294414,
+              "least_squares_coordinate_scaling_factor": 1.3505566801055926,
+              "residual_after_scalar_fit": 0.9995239617014158
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.1116257643726179,
+                "std": 0.7034775161595549,
+                "min": -0.9999999997957008,
+                "max": 0.9999998476293653
+              },
+              "relative_l2_error": 6.247352072381235,
+              "norm_ratio": 6.201179856148162,
+              "least_squares_coordinate_scaling_factor": 0.21261184600581318,
+              "residual_after_scalar_fit": 0.9994120722607203
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.592879659166617e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 5.0670332944444685e-17,
+              "norm_ratio": 0.9999999999999946,
+              "least_squares_coordinate_scaling_factor": 1.0,
+              "residual_after_scalar_fit": 5.0670332944444685e-17
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8489729379739116,
+                "std": 0.19207058735911497,
+                "min": 0.011771658936893229,
+                "max": 0.9999999835974831
+              },
+              "relative_l2_error": 0.4361951870122003,
+              "norm_ratio": 0.899852076081058,
+              "least_squares_coordinate_scaling_factor": 0.8097337588273913,
+              "residual_after_scalar_fit": 0.43619518701220045
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 0.5,
+      "sigma": 0.6818645443824155,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 0.10673999178801331,
+            "std": 0.20822498441740178,
+            "min": 0.004761301504237698,
+            "max": 9.705170435131912
+          },
+          "global_l2_norm": 14.975325794401005,
+          "x_dot_score": {
+            "mean": -0.021501546944478513,
+            "std": 0.061296515059312696,
+            "min": -0.3315646054393485,
+            "max": 1.5714930467652577
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.04468000329355868,
+            "std": 0.047151633960126456,
+            "min": 4.800606438649935e-05,
+            "max": 1.5714930467652577
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 0.8010331584605512,
+            "std": 1.2498029188097663,
+            "min": 0.022359993792091488,
+            "max": 56.701150278441396
+          },
+          "global_l2_norm": 95.00630151273855,
+          "x_dot_score": {
+            "mean": 0.0901890464998912,
+            "std": 0.4367935423115845,
+            "min": -2.4430210600016835,
+            "max": 4.954928701792092
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.32414388916935044,
+            "std": 0.306355025791694,
+            "min": 0.00010059208372964479,
+            "max": 4.954928701792092
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 0.6841392506108621,
+            "std": 1.2396339297867922,
+            "min": 0.017423060751922907,
+            "max": 56.48423784082205
+          },
+          "global_l2_norm": 90.61683122165678,
+          "x_dot_score": {
+            "mean": -7.179122043043654e-18,
+            "std": 8.243606161577734e-17,
+            "min": -1.7763568394002505e-15,
+            "max": 6.661338147750939e-16
+          },
+          "absolute_x_dot_score": {
+            "mean": 4.591754191973109e-17,
+            "std": 6.883911237137523e-17,
+            "min": 0.0,
+            "max": 1.7763568394002505e-15
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 0.952096124637136,
+              "std": 0.6821463563465163,
+              "min": 0.05866958611833241,
+              "max": 31.161069709955353
+            },
+            "global_l2_norm": 74.95956612453149,
+            "x_dot_score": {
+              "mean": -0.08005318264426559,
+              "std": 0.563041886518051,
+              "min": -16.108552332823393,
+              "max": 3.001550348090579
+            },
+            "absolute_x_dot_score": {
+              "mean": 0.3952512586162484,
+              "std": 0.4089023362461429,
+              "min": 6.863004345544765e-05,
+              "max": 16.108552332823393
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 0.8109702021904964,
+              "std": 0.6250706641330288,
+              "min": 0.015135596000276112,
+              "max": 26.674459829758256
+            },
+            "global_l2_norm": 65.53006235603974,
+            "x_dot_score": {
+              "mean": 6.5335704406725695e-18,
+              "std": 9.091815684625287e-17,
+              "min": -7.216449660063518e-16,
+              "max": 1.1102230246251565e-15
+            },
+            "absolute_x_dot_score": {
+              "mean": 5.743669700274449e-17,
+              "std": 7.078011461164708e-17,
+              "min": 0.0,
+              "max": 1.1102230246251565e-15
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": 0.5461578776029311,
+              "std": 0.41372272797271203,
+              "min": -0.9893267562982023,
+              "max": 0.9995999418276328
+            },
+            "relative_l2_error": 5.456592628080922,
+            "norm_ratio": 6.344189289574808,
+            "least_squares_coordinate_scaling_factor": 5.737167316564985,
+            "residual_after_scalar_fit": 0.4268584916123671
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.8363842908028314,
+              "std": 0.18996232253820597,
+              "min": 0.06287602554637538,
+              "max": 0.999999988251043
+            },
+            "relative_l2_error": 0.3004482606283255,
+            "norm_ratio": 0.9537981142177798,
+            "least_squares_coordinate_scaling_factor": 0.9097308426854117,
+            "residual_after_scalar_fit": 0.30044826062832536
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.12419741475026286,
+              "std": 0.5724900181093668,
+              "min": -0.9999861935433472,
+              "max": 0.9994106619233836
+            },
+            "relative_l2_error": 1.306623753532456,
+            "norm_ratio": 0.7889957290304586,
+            "least_squares_coordinate_scaling_factor": -0.04237568643348141,
+            "residual_after_scalar_fit": 0.9985566630758257
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.582937747229195e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.3181354556175812,
+            "norm_ratio": 0.681864544382408,
+            "least_squares_coordinate_scaling_factor": 0.6818645443824154,
+            "residual_after_scalar_fit": 1.5528703657896818e-16
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": -0.011757836409702934,
+            "std": 3.469446951953614e-18,
+            "min": -0.011757836409702937,
+            "max": -0.011757836409702937
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 0.43474307005726903,
+              "std": 0.11951824164516862,
+              "min": 0.06930380583635064,
+              "max": 0.7964132424729174
+            },
+            "global_l2_norm": 28.855849637669177,
+            "x_dot_score": {
+              "mean": 6.359798819129267e-20,
+              "std": 1.5000007766386793e-17,
+              "min": -1.6653345369377348e-16,
+              "max": 1.6653345369377348e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 6.41127612980482e-18,
+              "std": 1.3560966635279066e-17,
+              "min": 0.0,
+              "max": 1.6653345369377348e-16
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 0.6375798149924755,
+              "std": 0.17528150221305264,
+              "min": 0.10163867062353435,
+              "max": 1.167993333916859
+            },
+            "global_l2_norm": 42.319035174067814,
+            "x_dot_score": {
+              "mean": 7.436049717976606e-19,
+              "std": 3.3892685490913945e-17,
+              "min": -2.220446049250313e-16,
+              "max": 2.220446049250313e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 2.0754890699578515e-17,
+              "std": 2.6804879969672192e-17,
+              "min": 0.0,
+              "max": 2.220446049250313e-16
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 7.835114356366673e-17,
+              "min": 0.9999999999999997,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.46656694242067964,
+            "norm_ratio": 1.4665669424206447,
+            "least_squares_coordinate_scaling_factor": 1.4665669424206942,
+            "residual_after_scalar_fit": 1.1655430971917552e-15
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.3037296059202793,
+              "std": 0.11848676643278382,
+              "min": 0.018755368495837324,
+              "max": 0.7855431280126179
+            },
+            "global_l2_norm": 20.86545146678191,
+            "x_dot_score": {
+              "mean": -5.648485530879605e-20,
+              "std": 7.677815962144854e-18,
+              "min": -5.551115123125783e-17,
+              "max": 5.551115123125783e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 3.70203855967495e-18,
+              "std": 6.72658598325521e-18,
+              "min": 0.0,
+              "max": 5.551115123125783e-17
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.4454397994771469,
+              "std": 0.17376877476464303,
+              "min": 0.027506003428913593,
+              "max": 1.1520515833890546
+            },
+            "global_l2_norm": 30.60058135986575,
+            "x_dot_score": {
+              "mean": -4.241161795712511e-20,
+              "std": 1.865215871844156e-17,
+              "min": -1.1102230246251565e-16,
+              "max": 1.1102230246251565e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.2233042143739024e-17,
+              "std": 1.408039429535751e-17,
+              "min": 0.0,
+              "max": 1.1102230246251565e-16
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": -0.289880097716106,
+                "std": 0.5470767719251288,
+                "min": -0.9993913616721457,
+                "max": 0.9967272819196292
+              },
+              "relative_l2_error": 2.5771594392672275,
+              "norm_ratio": 2.245001596136411,
+              "least_squares_coordinate_scaling_factor": -0.3008593043746213,
+              "residual_after_scalar_fit": 0.9909795795658545
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": -0.289880097716106,
+                "std": 0.5470767719251287,
+                "min": -0.9993913616721459,
+                "max": 0.9967272819196291
+              },
+              "relative_l2_error": 3.5668831676606305,
+              "norm_ratio": 3.2924451265753603,
+              "least_squares_coordinate_scaling_factor": -0.44123031011550584,
+              "residual_after_scalar_fit": 0.990979579565858
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": -0.289880097716106,
+                "std": 0.5470767719251288,
+                "min": -0.9993913616721457,
+                "max": 0.9967272819196293
+              },
+              "relative_l2_error": 2.5771594392672568,
+              "norm_ratio": 2.245001596136438,
+              "least_squares_coordinate_scaling_factor": -0.3008593043746215,
+              "residual_after_scalar_fit": 0.990979579565858
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": -0.289880097716106,
+                "std": 0.5470767719251287,
+                "min": -0.9993913616721457,
+                "max": 0.9967272819196291
+              },
+              "relative_l2_error": 3.56688316766067,
+              "norm_ratio": 3.2924451265753976,
+              "least_squares_coordinate_scaling_factor": -0.4412303101155061,
+              "residual_after_scalar_fit": 0.990979579565862
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": -0.33016564970934936,
+                "std": 0.6434992148220565,
+                "min": -0.9999983324632373,
+                "max": 0.999999999922699
+              },
+              "relative_l2_error": 2.487326138422932,
+              "norm_ratio": 2.1412782888108626,
+              "least_squares_coordinate_scaling_factor": -0.3008593043746215,
+              "residual_after_scalar_fit": 0.9900800353601419
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.493550593231514e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 6.099635130267963e-17,
+              "norm_ratio": 0.9999999999999764,
+              "least_squares_coordinate_scaling_factor": 0.9999999999999994,
+              "residual_after_scalar_fit": 5.692171977997499e-16
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8363842908028314,
+                "std": 0.18996232253820597,
+                "min": 0.06287602554637538,
+                "max": 0.999999988251043
+              },
+              "relative_l2_error": 0.3004482606283255,
+              "norm_ratio": 0.9537981142177798,
+              "least_squares_coordinate_scaling_factor": 0.9097308426854117,
+              "residual_after_scalar_fit": 0.30044826062832536
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.37888693861975997,
+                "std": 0.5320874670908395,
+                "min": -0.9992699139137846,
+                "max": 0.999891708489787
+              },
+              "relative_l2_error": 3.0416092172736966,
+              "norm_ratio": 3.104722109539382,
+              "least_squares_coordinate_scaling_factor": 0.6939563734292155,
+              "residual_after_scalar_fit": 0.9747001639700986
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.37888693861975997,
+                "std": 0.5320874670908394,
+                "min": -0.9992699139137848,
+                "max": 0.999891708489787
+              },
+              "relative_l2_error": 4.438120931852375,
+              "norm_ratio": 4.553282811253107,
+              "least_squares_coordinate_scaling_factor": 1.0177334767534392,
+              "residual_after_scalar_fit": 0.9747001639701031
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.37888693861975997,
+                "std": 0.5320874670908394,
+                "min": -0.9992699139137847,
+                "max": 0.9998917084897871
+              },
+              "relative_l2_error": 3.0416092172737383,
+              "norm_ratio": 3.1047221095394333,
+              "least_squares_coordinate_scaling_factor": 0.6939563734292165,
+              "residual_after_scalar_fit": 0.9747001639701031
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.37888693861975997,
+                "std": 0.5320874670908394,
+                "min": -0.9992699139137847,
+                "max": 0.9998917084897869
+              },
+              "relative_l2_error": 4.438120931852448,
+              "norm_ratio": 4.55328281125318,
+              "least_squares_coordinate_scaling_factor": 1.0177334767534405,
+              "residual_after_scalar_fit": 0.9747001639701067
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.43491144689032657,
+                "std": 0.6164181434989997,
+                "min": -0.9999999993788604,
+                "max": 0.9999999999596155
+              },
+              "relative_l2_error": 2.895039757705918,
+              "norm_ratio": 2.96127809324899,
+              "least_squares_coordinate_scaling_factor": 0.6939563734292162,
+              "residual_after_scalar_fit": 0.9721538500094137
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.225076119881666e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.091173305321999e-17,
+              "norm_ratio": 0.9999999999999674,
+              "least_squares_coordinate_scaling_factor": 0.9999999999999989,
+              "residual_after_scalar_fit": 1.1134931092094568e-15
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8363842908028314,
+                "std": 0.18996232253820597,
+                "min": 0.06287602554637538,
+                "max": 0.999999988251043
+              },
+              "relative_l2_error": 0.3004482606283255,
+              "norm_ratio": 0.9537981142177798,
+              "least_squares_coordinate_scaling_factor": 0.9097308426854117,
+              "residual_after_scalar_fit": 0.30044826062832536
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 0.9,
+      "sigma": 0.9317035352494483,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 0.07193192140970167,
+            "std": 0.01934573564578263,
+            "min": 0.0101549124481333,
+            "max": 0.16922301849788488
+          },
+          "global_l2_norm": 4.767230565725486,
+          "x_dot_score": {
+            "mean": -0.029268692463218355,
+            "std": 0.033799101134625247,
+            "min": -0.15438377007642726,
+            "max": 0.1341128234597218
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.03850452857655187,
+            "std": 0.022725247525881467,
+            "min": 1.4367875014409393e-05,
+            "max": 0.15438377007642726
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 0.2525971941497963,
+            "std": 0.1326219408599286,
+            "min": 0.006620498765528341,
+            "max": 1.0809617100829965
+          },
+          "global_l2_norm": 18.258956794993466,
+          "x_dot_score": {
+            "mean": -0.0052860540361001455,
+            "std": 0.15195636874517818,
+            "min": -0.9315449408546063,
+            "max": 0.6946608157768477
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.11473409930588485,
+            "std": 0.09977357779472726,
+            "min": 6.583049039129985e-05,
+            "max": 0.9315449408546063
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 0.20857564969341874,
+            "std": 0.12153781171009906,
+            "min": 0.001632693820860787,
+            "max": 0.9571886175211678
+          },
+          "global_l2_norm": 15.449769850971705,
+          "x_dot_score": {
+            "mean": 5.581345348510207e-19,
+            "std": 2.4741800532651273e-17,
+            "min": -1.734723475976807e-16,
+            "max": 2.2898349882893854e-16
+          },
+          "absolute_x_dot_score": {
+            "mean": 1.568014880850396e-17,
+            "std": 1.9146831098113034e-17,
+            "min": 0.0,
+            "max": 2.2898349882893854e-16
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 0.2781484992568759,
+              "std": 0.13795420948540416,
+              "min": 0.014023380406976116,
+              "max": 1.25070872692341
+            },
+            "global_l2_norm": 19.870732486839167,
+            "x_dot_score": {
+              "mean": -0.02827379916729161,
+              "std": 0.15901616255159282,
+              "min": -0.8726010684502561,
+              "max": 1.175103037621769
+            },
+            "absolute_x_dot_score": {
+              "mean": 0.12352459027079504,
+              "std": 0.10405394404067103,
+              "min": 3.36273481790772e-05,
+              "max": 1.175103037621769
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 0.23038904889390643,
+              "std": 0.1312756261892107,
+              "min": 0.002162259736646496,
+              "max": 1.058553933763431
+            },
+            "global_l2_norm": 16.9705511489482,
+            "x_dot_score": {
+              "mean": 2.3183163553355255e-18,
+              "std": 2.570310764151226e-17,
+              "min": -1.6653345369377348e-16,
+              "max": 1.8735013540549517e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.6774038713528532e-17,
+              "std": 1.961264791892375e-17,
+              "min": 0.0,
+              "max": 1.8735013540549517e-16
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": -0.08510327827716259,
+              "std": 0.4731991343057097,
+              "min": -0.9999717997112693,
+              "max": 0.9935306001925661
+            },
+            "relative_l2_error": 3.867908636879873,
+            "norm_ratio": 3.8300972741415866,
+            "least_squares_coordinate_scaling_factor": 0.35446395306839307,
+            "residual_after_scalar_fit": 0.9957083185650375
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.8227959594933183,
+              "std": 0.1976155311856438,
+              "min": 0.02237787665822707,
+              "max": 0.999999986480303
+            },
+            "relative_l2_error": 0.5329488547769623,
+            "norm_ratio": 0.8461474565297797,
+            "least_squares_coordinate_scaling_factor": 0.7159655181918918,
+            "residual_after_scalar_fit": 0.5329488547769566
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.21483336696749714,
+              "std": 0.553723770673683,
+              "min": -0.9997110972161779,
+              "max": 0.9999229406973826
+            },
+            "relative_l2_error": 1.6117078923688843,
+            "norm_ratio": 1.0882731532771115,
+            "least_squares_coordinate_scaling_factor": -0.20663193709029626,
+            "residual_after_scalar_fit": 0.9818089707208512
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.259542950360003e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.06829646475054806,
+            "norm_ratio": 0.9317035352493972,
+            "least_squares_coordinate_scaling_factor": 0.9317035352494454,
+            "residual_after_scalar_fit": 3.098968178126046e-15
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": 1.3759539394093425,
+            "std": 4.440892098500626e-16,
+            "min": 1.375953939409343,
+            "max": 1.375953939409343
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 0.11700198027687572,
+              "std": 0.027352934038648115,
+              "min": 0.024792107996871912,
+              "max": 0.17076156207853369
+            },
+            "global_l2_norm": 7.690032484346124,
+            "x_dot_score": {
+              "mean": -2.9682342305699707e-21,
+              "std": 3.4357710226128717e-18,
+              "min": -2.7755575615628914e-17,
+              "max": 2.7755575615628914e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.5728511577378097e-18,
+              "std": 3.0546146345889347e-18,
+              "min": 0.0,
+              "max": 2.7755575615628914e-17
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 0.12557855138496432,
+              "std": 0.029357980305746944,
+              "min": 0.026609438580947567,
+              "max": 0.18327886030057305
+            },
+            "global_l2_norm": 8.25373328897721,
+            "x_dot_score": {
+              "mean": -2.7691835559167415e-20,
+              "std": 5.627721614410009e-18,
+              "min": -2.7755575615628914e-17,
+              "max": 2.7755575615628914e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 3.71151525776024e-18,
+              "std": 4.230445827388492e-18,
+              "min": 0.0,
+              "max": 2.7755575615628914e-17
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 7.433042128200864e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.07330278588269779,
+            "norm_ratio": 1.0733027858825677,
+            "least_squares_coordinate_scaling_factor": 1.0733027858826891,
+            "residual_after_scalar_fit": 1.6926045233266756e-14
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.10752008682776286,
+              "std": 0.031040983529243858,
+              "min": 0.020045601991397675,
+              "max": 0.17635359597620864
+            },
+            "global_l2_norm": 7.162315383011375,
+            "x_dot_score": {
+              "mean": -4.1838071599896156e-20,
+              "std": 2.7786604056201807e-18,
+              "min": -1.3877787807814457e-17,
+              "max": 2.0816681711721685e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.2071899708993028e-18,
+              "std": 2.5030773955586653e-18,
+              "min": 0.0,
+              "max": 2.0816681711721685e-17
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.11540160873058845,
+              "std": 0.03331637409847665,
+              "min": 0.02151500046206307,
+              "max": 0.18928080586169813
+            },
+            "global_l2_norm": 7.687333053956686,
+            "x_dot_score": {
+              "mean": -5.463135035121785e-20,
+              "std": 5.248331439031976e-18,
+              "min": -2.7755575615628914e-17,
+              "max": 2.7755575615628914e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 3.425747620577897e-18,
+              "std": 3.976458313434098e-18,
+              "min": 0.0,
+              "max": 2.7755575615628914e-17
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": -0.40686809281659786,
+                "std": 0.5016404104693831,
+                "min": -0.9999281111712576,
+                "max": 0.9985007197362578
+              },
+              "relative_l2_error": 2.7655324332040117,
+              "norm_ratio": 2.212205817139229,
+              "least_squares_coordinate_scaling_factor": -0.8771575308596695,
+              "residual_after_scalar_fit": 0.9180312220528543
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": -0.4068680928165979,
+                "std": 0.501640410469383,
+                "min": -0.9999281111712577,
+                "max": 0.9985007197362576
+              },
+              "relative_l2_error": 2.9189944004668735,
+              "norm_ratio": 2.3743666664814658,
+              "least_squares_coordinate_scaling_factor": -0.9414556215296799,
+              "residual_after_scalar_fit": 0.9180312220528576
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": -0.4068680928165979,
+                "std": 0.501640410469383,
+                "min": -0.9999281111712576,
+                "max": 0.9985007197362579
+              },
+              "relative_l2_error": 2.7655324332040356,
+              "norm_ratio": 2.212205817139249,
+              "least_squares_coordinate_scaling_factor": -0.8771575308596715,
+              "residual_after_scalar_fit": 0.9180312220528576
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": -0.40686809281659786,
+                "std": 0.501640410469383,
+                "min": -0.9999281111712573,
+                "max": 0.9985007197362581
+              },
+              "relative_l2_error": 2.918994400466899,
+              "norm_ratio": 2.374366666481489,
+              "least_squares_coordinate_scaling_factor": -0.9414556215296822,
+              "residual_after_scalar_fit": 0.9180312220528606
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": -0.46943812220746856,
+                "std": 0.5971437743565102,
+                "min": -0.9999999806423944,
+                "max": 0.9999999234231529
+              },
+              "relative_l2_error": 2.501628707496726,
+              "norm_ratio": 1.8718523254928612,
+              "least_squares_coordinate_scaling_factor": -0.8771575308596716,
+              "residual_after_scalar_fit": 0.883408325346664
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 8.843687654782388e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.596422184101966e-17,
+              "norm_ratio": 0.9999999999998789,
+              "least_squares_coordinate_scaling_factor": 0.9999999999999853,
+              "residual_after_scalar_fit": 1.465442023416448e-14
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8227959594933183,
+                "std": 0.1976155311856438,
+                "min": 0.02237787665822707,
+                "max": 0.999999986480303
+              },
+              "relative_l2_error": 0.5329488547769623,
+              "norm_ratio": 0.8461474565297797,
+              "least_squares_coordinate_scaling_factor": 0.7159655181918918,
+              "residual_after_scalar_fit": 0.5329488547769566
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.4060937365317606,
+                "std": 0.49548244712312034,
+                "min": -0.9970836134764466,
+                "max": 0.999948453437051
+              },
+              "relative_l2_error": 2.1756304857362303,
+              "norm_ratio": 2.3752004325600296,
+              "least_squares_coordinate_scaling_factor": 0.9541045421843531,
+              "residual_after_scalar_fit": 0.915773807587077
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.4060937365317606,
+                "std": 0.49548244712312034,
+                "min": -0.9970836134764465,
+                "max": 0.9999484534370511
+              },
+              "relative_l2_error": 2.334714432529239,
+              "norm_ratio": 2.5493092412964913,
+              "least_squares_coordinate_scaling_factor": 1.0240430631498112,
+              "residual_after_scalar_fit": 0.9157738075870807
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.4060937365317606,
+                "std": 0.4954824471231203,
+                "min": -0.9970836134764465,
+                "max": 0.999948453437051
+              },
+              "relative_l2_error": 2.175630485736249,
+              "norm_ratio": 2.37520043256005,
+              "least_squares_coordinate_scaling_factor": 0.9541045421843558,
+              "residual_after_scalar_fit": 0.9157738075870807
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.4060937365317606,
+                "std": 0.49548244712312034,
+                "min": -0.9970836134764467,
+                "max": 0.9999484534370511
+              },
+              "relative_l2_error": 2.334714432529258,
+              "norm_ratio": 2.549309241296515,
+              "least_squares_coordinate_scaling_factor": 1.024043063149814,
+              "residual_after_scalar_fit": 0.915773807587083
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.4689758198820736,
+                "std": 0.5907242905930157,
+                "min": -0.9999990898882629,
+                "max": 0.9999999638276038
+              },
+              "relative_l2_error": 1.769453470355592,
+              "norm_ratio": 2.009769804759229,
+              "least_squares_coordinate_scaling_factor": 0.9541045421843559,
+              "residual_after_scalar_fit": 0.8801297322481365
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.042220118439629e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.6439561216007227e-17,
+              "norm_ratio": 0.9999999999998699,
+              "least_squares_coordinate_scaling_factor": 0.999999999999983,
+              "residual_after_scalar_fit": 1.6986501413626308e-14
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8227959594933183,
+                "std": 0.1976155311856438,
+                "min": 0.02237787665822707,
+                "max": 0.999999986480303
+              },
+              "relative_l2_error": 0.5329488547769623,
+              "norm_ratio": 0.8461474565297797,
+              "least_squares_coordinate_scaling_factor": 0.7159655181918918,
+              "residual_after_scalar_fit": 0.5329488547769566
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 1.0,
+      "sigma": 0.9581002210711039,
+      "ext_checkpoint": {
+        "raw_model_output": {
+          "l2_norm": {
+            "mean": 0.07395426829906536,
+            "std": 0.01577783969354838,
+            "min": 0.009048942503731073,
+            "max": 0.15585064537733928
+          },
+          "global_l2_norm": 4.83959097513273,
+          "x_dot_score": {
+            "mean": -0.028936355092807054,
+            "std": 0.03374710140311541,
+            "min": -0.12144627686191814,
+            "max": 0.13677830440635208
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.03849548365547294,
+            "std": 0.022232346644031793,
+            "min": 2.378055624562784e-05,
+            "max": 0.13677830440635208
+          }
+        },
+        "wrapper_output": {
+          "l2_norm": {
+            "mean": 0.21182820357779097,
+            "std": 0.11154809968358988,
+            "min": 0.014393630818322936,
+            "max": 1.1598892609656808
+          },
+          "global_l2_norm": 15.321841451599806,
+          "x_dot_score": {
+            "mean": -0.0037119142179866064,
+            "std": 0.1238268269703872,
+            "min": -0.6736997674181932,
+            "max": 0.6421499044002414
+          },
+          "absolute_x_dot_score": {
+            "mean": 0.09295041205699664,
+            "std": 0.08189677822204286,
+            "min": 2.831125188558145e-05,
+            "max": 0.6736997674181932
+          }
+        },
+        "tangent_projected_output": {
+          "l2_norm": {
+            "mean": 0.17634619890636077,
+            "std": 0.10425604596653607,
+            "min": 0.004583445344361189,
+            "max": 1.0462115760686457
+          },
+          "global_l2_norm": 13.110990856383264,
+          "x_dot_score": {
+            "mean": -1.6289130135608615e-19,
+            "std": 2.0078782250725795e-17,
+            "min": -1.5265566588595902e-16,
+            "max": 2.0816681711721685e-16
+          },
+          "absolute_x_dot_score": {
+            "mean": 1.29824040858049e-17,
+            "std": 1.5318002950809156e-17,
+            "min": 0.0,
+            "max": 2.0816681711721685e-16
+          }
+        },
+        "coordinate_transform": {
+          "input_before": "standard-earth x",
+          "input_after": "upstream native -x",
+          "vector_pullback": "v_standard = -v_upstream",
+          "wrapper_output_at_minus_x_pulled_back": {
+            "l2_norm": {
+              "mean": 0.22791744257175856,
+              "std": 0.11744863361060065,
+              "min": 0.011755471061253592,
+              "max": 1.0102785823918758
+            },
+            "global_l2_norm": 16.409547852079136,
+            "x_dot_score": {
+              "mean": -0.020810676921740948,
+              "std": 0.13503387255654273,
+              "min": -0.5206333505197475,
+              "max": 0.655465806354391
+            },
+            "absolute_x_dot_score": {
+              "mean": 0.10381630866441469,
+              "std": 0.0888223230210325,
+              "min": 0.00014185657019706588,
+              "max": 0.655465806354391
+            }
+          },
+          "pulled_back_tangent_projection": {
+            "l2_norm": {
+              "mean": 0.18734846656803444,
+              "std": 0.10942514897635024,
+              "min": 0.0011808867186942332,
+              "max": 0.9922801212835963
+            },
+            "global_l2_norm": 13.88568624470304,
+            "x_dot_score": {
+              "mean": 2.3189756796760413e-18,
+              "std": 2.231784741217122e-17,
+              "min": -2.220446049250313e-16,
+              "max": 1.5265566588595902e-16
+            },
+            "absolute_x_dot_score": {
+              "mean": 1.4167354624157945e-17,
+              "std": 1.7399713338708e-17,
+              "min": 0.0,
+              "max": 2.220446049250313e-16
+            }
+          }
+        },
+        "pairwise_cosine_and_scale": {
+          "raw_vs_wrapper": {
+            "cosine": {
+              "mean": -0.14095026601013178,
+              "std": 0.47952509164618556,
+              "min": -0.9997996823876503,
+              "max": 0.9825781727757785
+            },
+            "relative_l2_error": 3.2752601976521865,
+            "norm_ratio": 3.1659372724523323,
+            "least_squares_coordinate_scaling_factor": 0.14791472538898412,
+            "residual_after_scalar_fit": 0.9989079930386805
+          },
+          "wrapper_vs_tangent_projection": {
+            "cosine": {
+              "mean": 0.8285361987499941,
+              "std": 0.1989349059047581,
+              "min": 0.01879573290634078,
+              "max": 0.999999965507376
+            },
+            "relative_l2_error": 0.5174623961778047,
+            "norm_ratio": 0.8557059474736599,
+            "least_squares_coordinate_scaling_factor": 0.7322326685418867,
+            "residual_after_scalar_fit": 0.5174623961777992
+          },
+          "wrapper_x_vs_pulled_back_wrapper_minus_x": {
+            "cosine": {
+              "mean": -0.21011022063082463,
+              "std": 0.5735716863792143,
+              "min": -0.9996606446564221,
+              "max": 0.9999325290198373
+            },
+            "relative_l2_error": 1.5838010362417212,
+            "norm_ratio": 1.070990579292588,
+            "least_squares_coordinate_scaling_factor": -0.18070245073352617,
+            "residual_after_scalar_fit": 0.9856632342535043
+          },
+          "wrapper_vs_sigma_times_wrapper": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.603948642186585e-17,
+              "min": 0.9999999999999996,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.04189977892889335,
+            "norm_ratio": 0.9581002210710413,
+            "least_squares_coordinate_scaling_factor": 0.9581002210710997,
+            "residual_after_scalar_fit": 4.403740099584534e-15
+          }
+        },
+        "normalized_model_input": {
+          "time": {
+            "mean": 1.722881883364103,
+            "std": 1.3322676295501878e-15,
+            "min": 1.7228818833641044,
+            "max": 1.7228818833641044
+          },
+          "xyz_component_values": {
+            "mean": 0.17856798587900624,
+            "std": 0.923397128141996,
+            "min": -2.0201092510922427,
+            "max": 1.7037389835613672
+          }
+        }
+      },
+      "upstream_checkpoint": {
+        "same_numeric_xyz": {
+          "raw_output_N_up": {
+            "l2_norm": {
+              "mean": 0.07676472187519325,
+              "std": 0.02186439406671407,
+              "min": 0.008479149971407012,
+              "max": 0.12937162435637514
+            },
+            "global_l2_norm": 5.108336415914623,
+            "x_dot_score": {
+              "mean": -6.999292150694013e-21,
+              "std": 1.9962147033688772e-18,
+              "min": -1.0408340855860843e-17,
+              "max": 1.3877787807814457e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 9.66334208473103e-19,
+              "std": 1.7467456396315005e-18,
+              "min": 0.0,
+              "max": 1.3877787807814457e-17
+            }
+          },
+          "effective_score_N_up_over_sigma": {
+            "l2_norm": {
+              "mean": 0.08012180791418091,
+              "std": 0.022820570944311894,
+              "min": 0.008849961397491156,
+              "max": 0.13502932314507213
+            },
+            "global_l2_norm": 5.331734930823601,
+            "x_dot_score": {
+              "mean": 4.3584921957243297e-20,
+              "std": 3.56997565777326e-18,
+              "min": -1.3877787807814457e-17,
+              "max": 2.0816681711721685e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 2.394746551465718e-18,
+              "std": 2.6479831564339813e-18,
+              "min": 0.0,
+              "max": 2.0816681711721685e-17
+            }
+          },
+          "raw_vs_effective": {
+            "cosine": {
+              "mean": 1.0,
+              "std": 8.114353330595029e-17,
+              "min": 0.9999999999999997,
+              "max": 1.0
+            },
+            "relative_l2_error": 0.04373214618617476,
+            "norm_ratio": 1.0437321461859783,
+            "least_squares_coordinate_scaling_factor": 1.0437321461861433,
+            "residual_after_scalar_fit": 3.8343153507758934e-14
+          }
+        },
+        "coordinate_aligned": {
+          "native_input": "-x_standard",
+          "output_transform": "-N_up(-x_standard)",
+          "raw_output_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.0697809557927528,
+              "std": 0.021688710041974008,
+              "min": 0.013730014767926822,
+              "max": 0.1164836903455687
+            },
+            "global_l2_norm": 4.676723939283217,
+            "x_dot_score": {
+              "mean": -2.4501606731703525e-20,
+              "std": 1.9740101479483573e-18,
+              "min": -1.3877787807814457e-17,
+              "max": 1.3877787807814457e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 9.999526897236363e-19,
+              "std": 1.7021783135882829e-18,
+              "min": 0.0,
+              "max": 1.3877787807814457e-17
+            }
+          },
+          "effective_score_in_standard_coordinates": {
+            "l2_norm": {
+              "mean": 0.07283262675249305,
+              "std": 0.02263720388011934,
+              "min": 0.014330457780896252,
+              "max": 0.12157777212006722
+            },
+            "global_l2_norm": 4.8812471142683735,
+            "x_dot_score": {
+              "mean": -1.5936823572964623e-20,
+              "std": 3.1472896058717906e-18,
+              "min": -2.0816681711721685e-17,
+              "max": 1.3877787807814457e-17
+            },
+            "absolute_x_dot_score": {
+              "mean": 2.087964701014195e-18,
+              "std": 2.355013641763495e-18,
+              "min": 0.0,
+              "max": 2.0816681711721685e-17
+            }
+          }
+        }
+      },
+      "comparisons": {
+        "same_numeric_xyz": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": -0.3844636968203009,
+                "std": 0.4975887463019489,
+                "min": -0.9998479684833087,
+                "max": 0.9900695147654086
+              },
+              "relative_l2_error": 3.3599985728725965,
+              "norm_ratio": 2.873706523371747,
+              "least_squares_coordinate_scaling_factor": -1.015700613618832,
+              "residual_after_scalar_fit": 0.9354548587733008
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": -0.3844636968203009,
+                "std": 0.4975887463019489,
+                "min": -0.9998479684833089,
+                "max": 0.9900695147654088
+              },
+              "relative_l2_error": 3.480878970907979,
+              "norm_ratio": 2.999379877148029,
+              "least_squares_coordinate_scaling_factor": -1.060119381335007,
+              "residual_after_scalar_fit": 0.9354548587733029
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": -0.3844636968203009,
+                "std": 0.4975887463019489,
+                "min": -0.9998479684833086,
+                "max": 0.9900695147654088
+              },
+              "relative_l2_error": 3.3599985728726276,
+              "norm_ratio": 2.873706523371773,
+              "least_squares_coordinate_scaling_factor": -1.0157006136188353,
+              "residual_after_scalar_fit": 0.935454858773303
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": -0.38446369682030096,
+                "std": 0.4975887463019489,
+                "min": -0.9998479684833088,
+                "max": 0.9900695147654089
+              },
+              "relative_l2_error": 3.4808789709080123,
+              "norm_ratio": 2.9993798771480553,
+              "least_squares_coordinate_scaling_factor": -1.0601193813350103,
+              "residual_after_scalar_fit": 0.9354548587733054
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": -0.4375926063156491,
+                "std": 0.5917760406630136,
+                "min": -0.9999999965435419,
+                "max": 0.9999932317718796
+              },
+              "relative_l2_error": 3.0130245816521306,
+              "norm_ratio": 2.4590477633432406,
+              "least_squares_coordinate_scaling_factor": -1.0157006136188353,
+              "residual_after_scalar_fit": 0.910710021258234
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.450661414470315e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.561103524302048e-17,
+              "norm_ratio": 0.9999999999998124,
+              "least_squares_coordinate_scaling_factor": 0.9999999999999649,
+              "residual_after_scalar_fit": 3.508311394564149e-14
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8285361987499941,
+                "std": 0.1989349059047581,
+                "min": 0.01879573290634078,
+                "max": 0.999999965507376
+              },
+              "relative_l2_error": 0.5174623961778047,
+              "norm_ratio": 0.8557059474736599,
+              "least_squares_coordinate_scaling_factor": 0.7322326685418867,
+              "residual_after_scalar_fit": 0.5174623961777992
+            }
+          }
+        },
+        "coordinate_aligned": {
+          "raw_output": {
+            "N_up_vs_sigma_times_ext_wrapper": {
+              "cosine": {
+                "mean": 0.3767837754040334,
+                "std": 0.49623125793069334,
+                "min": -0.9915901019867921,
+                "max": 0.9994155013709521
+              },
+              "relative_l2_error": 2.9445826907176205,
+              "norm_ratio": 3.13891943860192,
+              "least_squares_coordinate_scaling_factor": 1.091124009779795,
+              "residual_after_scalar_fit": 0.9376387110239515
+            },
+            "N_up_vs_ext_wrapper_no_sigma": {
+              "cosine": {
+                "mean": 0.3767837754040334,
+                "std": 0.49623125793069334,
+                "min": -0.9915901019867923,
+                "max": 0.9994155013709524
+              },
+              "relative_l2_error": 3.0750196521728346,
+              "norm_ratio": 3.276191122357512,
+              "least_squares_coordinate_scaling_factor": 1.1388412044827394,
+              "residual_after_scalar_fit": 0.9376387110239547
+            }
+          },
+          "effective_score": {
+            "N_up_over_sigma_vs_ext_wrapper": {
+              "cosine": {
+                "mean": 0.3767837754040334,
+                "std": 0.4962312579306934,
+                "min": -0.9915901019867924,
+                "max": 0.9994155013709524
+              },
+              "relative_l2_error": 2.9445826907176453,
+              "norm_ratio": 3.138919438601949,
+              "least_squares_coordinate_scaling_factor": 1.0911240097797992,
+              "residual_after_scalar_fit": 0.9376387110239547
+            },
+            "N_up_over_sigma_vs_ext_wrapper_over_sigma": {
+              "cosine": {
+                "mean": 0.3767837754040334,
+                "std": 0.49623125793069334,
+                "min": -0.991590101986792,
+                "max": 0.9994155013709524
+              },
+              "relative_l2_error": 3.0750196521728634,
+              "norm_ratio": 3.276191122357541,
+              "least_squares_coordinate_scaling_factor": 1.1388412044827438,
+              "residual_after_scalar_fit": 0.9376387110239576
+            }
+          },
+          "tangent_projection": {
+            "projected_upstream_vs_projected_ext": {
+              "cosine": {
+                "mean": 0.42838738471025295,
+                "std": 0.5900625827210667,
+                "min": -0.9999977728186472,
+                "max": 0.9999997064833109
+              },
+              "relative_l2_error": 2.456075157189812,
+              "norm_ratio": 2.685992032252545,
+              "least_squares_coordinate_scaling_factor": 1.0911240097797992,
+              "residual_after_scalar_fit": 0.913771942743068
+            },
+            "upstream_projection_change": {
+              "cosine": {
+                "mean": 1.0,
+                "std": 9.328877711814975e-17,
+                "min": 0.9999999999999996,
+                "max": 1.0
+              },
+              "relative_l2_error": 4.3339979037760394e-17,
+              "norm_ratio": 0.9999999999997952,
+              "least_squares_coordinate_scaling_factor": 0.9999999999999581,
+              "residual_after_scalar_fit": 4.185535618352807e-14
+            },
+            "ext_projection_change": {
+              "cosine": {
+                "mean": 0.8285361987499941,
+                "std": 0.1989349059047581,
+                "min": 0.01879573290634078,
+                "max": 0.999999965507376
+              },
+              "relative_l2_error": 0.5174623961778047,
+              "norm_ratio": 0.8557059474736599,
+              "least_squares_coordinate_scaling_factor": 0.7322326685418867,
+              "residual_after_scalar_fit": 0.5174623961777992
+            }
+          }
+        }
+      }
+    }
+  ],
+  "ext_normalization_load_trace": {
+    "teacher": "heat",
+    "model_path": "/home/r0700008/scoremodel/results/earthquake_linear_beta_100k_ema_heat/model.pt",
+    "checkpoint_prefix": "",
+    "stages": [
+      {
+        "stage": "1_constructor_immediately_after",
+        "all_normalization_buffers_exact": false,
+        "buffers": {
+          "x_mean": {
+            "checkpoint_key": "x_mean",
+            "checkpoint_value": [
+              [
+                0.037445301408986234,
+                0.10226689569390357,
+                0.1926605580211337
+              ]
+            ],
+            "current_value": [
+              [
+                0.0,
+                0.0,
+                0.0
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.1926605580211337,
+            "exact_equal": false
+          },
+          "x_std": {
+            "checkpoint_key": "x_std",
+            "checkpoint_value": [
+              [
+                0.5625674584055242,
+                0.5970253133391878,
+                0.5275719007160565
+              ]
+            ],
+            "current_value": [
+              [
+                1.0,
+                1.0,
+                1.0
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.47242809928394347,
+            "exact_equal": false
+          },
+          "t_mean": {
+            "checkpoint_key": "t_mean",
+            "checkpoint_value": [
+              [
+                0.5033891292455923
+              ]
+            ],
+            "current_value": [
+              [
+                0.0
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              1
+            ],
+            "current_shape": [
+              1,
+              1
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.5033891292455923,
+            "exact_equal": false
+          },
+          "t_std": {
+            "checkpoint_key": "t_std",
+            "checkpoint_value": [
+              [
+                0.2882442932098884
+              ]
+            ],
+            "current_value": [
+              [
+                1.0
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              1
+            ],
+            "current_shape": [
+              1,
+              1
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.7117557067901116,
+            "exact_equal": false
+          },
+          "y_mean": {
+            "checkpoint_key": "y_mean",
+            "checkpoint_value": [
+              [
+                0.0649495098904775,
+                -0.047591603072850895,
+                0.48566599125803894
+              ]
+            ],
+            "current_value": [
+              [
+                0.0,
+                0.0,
+                0.0
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.48566599125803894,
+            "exact_equal": false
+          },
+          "y_std": {
+            "checkpoint_key": "y_std",
+            "checkpoint_value": [
+              [
+                5.748065535124896,
+                17.878786547031797,
+                6.010933260764643
+              ]
+            ],
+            "current_value": [
+              [
+                1.0,
+                1.0,
+                1.0
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 16.878786547031797,
+            "exact_equal": false
+          }
+        }
+      },
+      {
+        "stage": "2_load_state_dict_immediately_after",
+        "all_normalization_buffers_exact": true,
+        "buffers": {
+          "x_mean": {
+            "checkpoint_key": "x_mean",
+            "checkpoint_value": [
+              [
+                0.037445301408986234,
+                0.10226689569390357,
+                0.1926605580211337
+              ]
+            ],
+            "current_value": [
+              [
+                0.037445301408986234,
+                0.10226689569390357,
+                0.1926605580211337
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "x_std": {
+            "checkpoint_key": "x_std",
+            "checkpoint_value": [
+              [
+                0.5625674584055242,
+                0.5970253133391878,
+                0.5275719007160565
+              ]
+            ],
+            "current_value": [
+              [
+                0.5625674584055242,
+                0.5970253133391878,
+                0.5275719007160565
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "t_mean": {
+            "checkpoint_key": "t_mean",
+            "checkpoint_value": [
+              [
+                0.5033891292455923
+              ]
+            ],
+            "current_value": [
+              [
+                0.5033891292455923
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              1
+            ],
+            "current_shape": [
+              1,
+              1
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "t_std": {
+            "checkpoint_key": "t_std",
+            "checkpoint_value": [
+              [
+                0.2882442932098884
+              ]
+            ],
+            "current_value": [
+              [
+                0.2882442932098884
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              1
+            ],
+            "current_shape": [
+              1,
+              1
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "y_mean": {
+            "checkpoint_key": "y_mean",
+            "checkpoint_value": [
+              [
+                0.0649495098904775,
+                -0.047591603072850895,
+                0.48566599125803894
+              ]
+            ],
+            "current_value": [
+              [
+                0.0649495098904775,
+                -0.047591603072850895,
+                0.48566599125803894
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "y_std": {
+            "checkpoint_key": "y_std",
+            "checkpoint_value": [
+              [
+                5.748065535124896,
+                17.878786547031797,
+                6.010933260764643
+              ]
+            ],
+            "current_value": [
+              [
+                5.748065535124896,
+                17.878786547031797,
+                6.010933260764643
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          }
+        }
+      },
+      {
+        "stage": "3_wrapper_immediately_after",
+        "all_normalization_buffers_exact": true,
+        "buffers": {
+          "x_mean": {
+            "checkpoint_key": "x_mean",
+            "checkpoint_value": [
+              [
+                0.037445301408986234,
+                0.10226689569390357,
+                0.1926605580211337
+              ]
+            ],
+            "current_value": [
+              [
+                0.037445301408986234,
+                0.10226689569390357,
+                0.1926605580211337
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "x_std": {
+            "checkpoint_key": "x_std",
+            "checkpoint_value": [
+              [
+                0.5625674584055242,
+                0.5970253133391878,
+                0.5275719007160565
+              ]
+            ],
+            "current_value": [
+              [
+                0.5625674584055242,
+                0.5970253133391878,
+                0.5275719007160565
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "t_mean": {
+            "checkpoint_key": "t_mean",
+            "checkpoint_value": [
+              [
+                0.5033891292455923
+              ]
+            ],
+            "current_value": [
+              [
+                0.5033891292455923
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              1
+            ],
+            "current_shape": [
+              1,
+              1
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "t_std": {
+            "checkpoint_key": "t_std",
+            "checkpoint_value": [
+              [
+                0.2882442932098884
+              ]
+            ],
+            "current_value": [
+              [
+                0.2882442932098884
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              1
+            ],
+            "current_shape": [
+              1,
+              1
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "y_mean": {
+            "checkpoint_key": "y_mean",
+            "checkpoint_value": [
+              [
+                0.0649495098904775,
+                -0.047591603072850895,
+                0.48566599125803894
+              ]
+            ],
+            "current_value": [
+              [
+                0.0649495098904775,
+                -0.047591603072850895,
+                0.48566599125803894
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          },
+          "y_std": {
+            "checkpoint_key": "y_std",
+            "checkpoint_value": [
+              [
+                5.748065535124896,
+                17.878786547031797,
+                6.010933260764643
+              ]
+            ],
+            "current_value": [
+              [
+                5.748065535124896,
+                17.878786547031797,
+                6.010933260764643
+              ]
+            ],
+            "checkpoint_shape": [
+              1,
+              3
+            ],
+            "current_shape": [
+              1,
+              3
+            ],
+            "checkpoint_dtype": "torch.float64",
+            "current_dtype": "torch.float64",
+            "max_abs_error": 0.0,
+            "exact_equal": true
+          }
+        }
+      }
+    ]
+  },
+  "upstream_checkpoint_metadata": {
+    "checkpoint_step": 100000,
+    "ema_rate": 0.999,
+    "parameter_source": "params_ema",
+    "checkpoint_array_count": 53,
+    "network_architecture": "upstream DivFreeGenerator/Concat",
+    "hidden_shapes": [
+      512,
+      512,
+      512,
+      512,
+      512
+    ],
+    "config_dtype": "float64"
+  }
+}
