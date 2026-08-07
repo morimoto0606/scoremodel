@@ -1,4 +1,4 @@
-"""Upstream-style scaled-score training for S2 Heat teacher datasets.
+"""Upstream-style scaled-score training for direct S2 score teachers.
 
 This module is deliberately separate from the existing direct-score training
 path.  Its network predicts ``sigma(t) * score`` while its public forward
@@ -177,7 +177,7 @@ def train_s2_upstream_style_score_model(
     checkpoint_callback: Callable[[Dict[str, object]], None] | None = None,
     return_training_state: bool = False,
 ):
-    """Train the independent Upstream-style Heat score path."""
+    """Train an independent Upstream-style scaled-score path."""
 
     required = {"time", "endpoint", "score_target"}
     missing = required.difference(dataset)

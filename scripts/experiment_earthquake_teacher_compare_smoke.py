@@ -165,9 +165,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--teacher-implementation batched requires --teacher malliavin")
     if (
         args.score_parameterization == "upstream_scaled_score"
-        and args.teacher != "heat"
+        and args.teacher not in {"heat", "malliavin"}
     ):
-        parser.error("--score-parameterization upstream_scaled_score requires --teacher heat")
+        parser.error(
+            "--score-parameterization upstream_scaled_score requires "
+            "--teacher heat or malliavin"
+        )
     shard_bounds_given = (
         args.teacher_start_index is not None or args.teacher_end_index is not None
     )
@@ -775,7 +778,7 @@ def build_model_from_training_checkpoint(model_path: Path, *, device: str):
     training_path = str(checkpoint["training_path"])
     teacher = str(checkpoint["teacher"])
     expected_paths = (
-        {"marginal_skorokhod"}
+        {"marginal_skorokhod", "upstream_scaled_score"}
         if teacher == "malliavin"
         else {"direct_score", "upstream_scaled_score"}
     )
@@ -1788,16 +1791,16 @@ def evaluate_dataset_loss(
     teacher: str,
 ) -> float:
     with torch.no_grad():
-        if teacher == "malliavin":
-            prediction = model.skorokhod_network(dataset["time"], dataset["endpoint"])
-            target = dataset["skorokhod"]
-            value = torch.mean((prediction - target) ** 2)
-        elif isinstance(model, UpstreamStyleScoreModel):
+        if isinstance(model, UpstreamStyleScoreModel):
             value = model.score_loss(
                 dataset["time"],
                 dataset["endpoint"],
                 dataset["score_target"],
             )
+        elif teacher == "malliavin":
+            prediction = model.skorokhod_network(dataset["time"], dataset["endpoint"])
+            target = dataset["skorokhod"]
+            value = torch.mean((prediction - target) ** 2)
         else:
             prediction = model(dataset["time"], dataset["endpoint"])
             target = dataset["score_target"]
@@ -1983,11 +1986,11 @@ def make_training_checkpoint_callback(
                 "format_version": 1,
                 "teacher": args.teacher,
                 "training_path": (
-                    "marginal_skorokhod"
-                    if args.teacher == "malliavin"
+                    "upstream_scaled_score"
+                    if args.score_parameterization == "upstream_scaled_score"
                     else (
-                        "upstream_scaled_score"
-                        if args.score_parameterization == "upstream_scaled_score"
+                        "marginal_skorokhod"
+                        if args.teacher == "malliavin"
                         else "direct_score"
                     )
                 ),
@@ -2131,7 +2134,12 @@ def time_target_diagnostics(
     return rows
 
 
-def diagnostic_target_key_for_teacher(teacher: str) -> str:
+def diagnostic_target_key_for_teacher(
+    teacher: str,
+    score_parameterization: str = "effective_score",
+) -> str:
+    if score_parameterization == "upstream_scaled_score":
+        return "score_target"
     return "skorokhod" if teacher == "malliavin" else "score_target"
 
 
@@ -2816,29 +2824,7 @@ def main() -> None:
         output_dir=output_dir,
         args=args,
     )
-    if args.teacher == "malliavin":
-        model, history, training_state = train_s2_marginal_score(
-            train_dataset,
-            n_epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            weight_decay=args.weight_decay,
-            hidden=args.hidden,
-            n_blocks=args.n_blocks,
-            num_frequencies=args.num_frequencies,
-            device=device,
-            return_history=True,
-            training_unit=args.training_unit,
-            updates=args.updates,
-            warmup_updates=args.warmup_updates,
-            lr_scheduler=args.lr_scheduler,
-            ema_rate=args.ema_rate,
-            checkpoint_every_updates=args.checkpoint_every_updates,
-            checkpoint_callback=checkpoint_callback,
-            return_training_state=True,
-        )
-        training_path = "marginal_skorokhod"
-    elif args.score_parameterization == "upstream_scaled_score":
+    if args.score_parameterization == "upstream_scaled_score":
         if not isinstance(beta_schedule, LinearBetaSchedule):
             raise ValueError(
                 "upstream_scaled_score training requires --beta-schedule linear"
@@ -2865,6 +2851,28 @@ def main() -> None:
             return_training_state=True,
         )
         training_path = "upstream_scaled_score"
+    elif args.teacher == "malliavin":
+        model, history, training_state = train_s2_marginal_score(
+            train_dataset,
+            n_epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            hidden=args.hidden,
+            n_blocks=args.n_blocks,
+            num_frequencies=args.num_frequencies,
+            device=device,
+            return_history=True,
+            training_unit=args.training_unit,
+            updates=args.updates,
+            warmup_updates=args.warmup_updates,
+            lr_scheduler=args.lr_scheduler,
+            ema_rate=args.ema_rate,
+            checkpoint_every_updates=args.checkpoint_every_updates,
+            checkpoint_callback=checkpoint_callback,
+            return_training_state=True,
+        )
+        training_path = "marginal_skorokhod"
     else:
         model, history, training_state = train_s2_score_model(
             train_dataset,
@@ -3013,7 +3021,10 @@ def main() -> None:
     geodesic = nearest_neighbor_geodesic_summary(generated_cpu, validation_initial.detach().cpu(), seed=args.seed)
     norm_error = generated_norm_error(generated_cpu)
     sample_finite_rate = finite_rate(generated_cpu)
-    diagnostic_target_key = diagnostic_target_key_for_teacher(args.teacher)
+    diagnostic_target_key = diagnostic_target_key_for_teacher(
+        args.teacher,
+        args.score_parameterization,
+    )
     time_diagnostics = {
         "train": time_target_diagnostics(
             train_dataset,
@@ -3028,6 +3039,7 @@ def main() -> None:
     metrics = {
         "teacher": args.teacher,
         "training_path": training_path,
+        "score_parameterization": args.score_parameterization,
         "initial_train_loss": initial_train_loss,
         "final_train_loss": final_train_loss,
         "best_train_loss": best_train_loss,
