@@ -10,10 +10,23 @@ from scoremodel_ext.manifold.upstream_style_score import (
     upstream_score_standard_deviation,
     upstream_style_score_loss,
 )
+from scoremodel_ext.manifold.online_heat_teacher import (
+    build_online_heat_teacher_batch,
+    train_s2_upstream_style_score_model_online_heat,
+)
+from scoremodel_ext.manifold.s2_malliavin import (
+    s2_batched_grw_endpoint,
+    s2_batched_heat_kernel_score,
+    s2_grw_endpoint,
+    s2_heat_kernel_score,
+)
 from scripts import experiment_earthquake_teacher_compare_smoke as runner
 from scripts.earthquake_heat_upstream_style_training import configured_arguments
 from scripts.earthquake_malliavin_upstream_style_training import (
     configured_arguments as configured_malliavin_arguments,
+)
+from scripts.earthquake_heat_online_teacher_training import (
+    configured_arguments as configured_online_arguments,
 )
 
 
@@ -135,6 +148,152 @@ def test_experiment_entry_point_rejects_parameterization_override():
         configured_arguments(["--teacher", "varadhan"])
     with pytest.raises(ValueError, match="fixes --score-parameterization"):
         configured_arguments(["--score-parameterization", "effective_score"])
+
+
+def test_online_experiment_entry_point_fixes_only_online_sampling():
+    arguments = configured_online_arguments(["--updates", "2"])
+
+    assert arguments[:2] == ["--teacher-sampling", "online"]
+    assert arguments[arguments.index("--teacher") + 1] == "heat"
+    assert (
+        arguments[arguments.index("--score-parameterization") + 1]
+        == "upstream_scaled_score"
+    )
+    assert arguments[arguments.index("--output-dir") + 1] == (
+        "results/earthquake_heat_ext_online_teacher"
+    )
+
+
+def test_batched_heat_teacher_matches_existing_scalar_functions():
+    initial = torch.tensor(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=DTYPE
+    )
+    noises = torch.tensor(
+        [
+            [[0.2, -0.1, 0.3], [0.4, 0.5, -0.2]],
+            [[-0.3, 0.1, 0.2], [0.5, -0.4, 0.1]],
+        ],
+        dtype=DTYPE,
+    )
+    brownian_times = torch.tensor([0.2, 0.35], dtype=DTYPE)
+
+    endpoints = s2_batched_grw_endpoint(initial, noises, brownian_times)
+    scalar_endpoints = torch.stack(
+        [
+            s2_grw_endpoint(x0, noise, float(t))
+            for x0, noise, t in zip(initial, noises, brownian_times)
+        ]
+    )
+    torch.testing.assert_close(endpoints, scalar_endpoints, rtol=0.0, atol=1e-12)
+
+    scores = s2_batched_heat_kernel_score(
+        initial, endpoints, brownian_times, n_terms=16
+    )
+    scalar_scores = torch.stack(
+        [
+            s2_heat_kernel_score(x0, endpoint, float(t), n_terms=16)
+            for x0, endpoint, t in zip(initial, endpoints, brownian_times)
+        ]
+    )
+    torch.testing.assert_close(scores, scalar_scores, rtol=0.0, atol=1e-12)
+
+
+def test_online_heat_batch_is_reproducible_and_refreshes():
+    initial = torch.tensor(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=DTYPE
+    )
+    schedule = LinearBetaSchedule(beta_0=0.001, beta_f=5.0, t0=0.0, tf=1.0)
+
+    def generator():
+        value = torch.Generator(device="cpu")
+        value.manual_seed(123)
+        return value
+
+    first_generator = generator()
+    first = build_online_heat_teacher_batch(
+        initial,
+        beta_schedule=schedule,
+        minimum_time=0.1,
+        maximum_time=0.9,
+        n_steps=2,
+        heat_terms=16,
+        generator=first_generator,
+    )
+    refreshed = build_online_heat_teacher_batch(
+        initial,
+        beta_schedule=schedule,
+        minimum_time=0.1,
+        maximum_time=0.9,
+        n_steps=2,
+        heat_terms=16,
+        generator=first_generator,
+    )
+    replay = build_online_heat_teacher_batch(
+        initial,
+        beta_schedule=schedule,
+        minimum_time=0.1,
+        maximum_time=0.9,
+        n_steps=2,
+        heat_terms=16,
+        generator=generator(),
+    )
+
+    for key in ("time", "noise", "endpoint", "score_target"):
+        torch.testing.assert_close(first[key], replay[key], rtol=0.0, atol=0.0)
+    assert not torch.equal(first["noise"], refreshed["noise"])
+
+
+def test_online_heat_trainer_uses_fresh_examples_and_reference_normalization():
+    torch.manual_seed(5)
+    initial = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [2.0**-0.5, 2.0**-0.5, 0.0],
+        ],
+        dtype=DTYPE,
+    )
+    reference_time = torch.tensor([0.1, 0.2, 0.3, 0.4], dtype=DTYPE)
+    reference = {
+        "time": reference_time,
+        "endpoint": initial.clone(),
+        "score_target": torch.zeros_like(initial),
+    }
+    schedule = LinearBetaSchedule(beta_0=0.001, beta_f=5.0, t0=0.0, tf=1.0)
+
+    model, history, state = train_s2_upstream_style_score_model_online_heat(
+        initial,
+        reference,
+        beta_schedule=schedule,
+        minimum_time=0.1,
+        maximum_time=0.5,
+        n_steps=2,
+        heat_terms=16,
+        online_teacher_seed=77,
+        n_epochs=1,
+        batch_size=2,
+        learning_rate=1e-3,
+        hidden=8,
+        n_blocks=1,
+        num_frequencies=2,
+        device="cpu",
+        return_history=True,
+        training_unit="updates",
+        updates=2,
+        ema_rate=0.9,
+        return_training_state=True,
+    )
+
+    assert history["teacher_sampling"] == "online"
+    assert state["teacher_sampling"] == "online"
+    assert state["teacher_examples_generated"] == 4
+    torch.testing.assert_close(
+        model.x_mean,
+        reference["endpoint"].mean(dim=0, keepdim=True),
+        rtol=0.0,
+        atol=0.0,
+    )
 
 
 def test_malliavin_entry_point_fixes_upstream_scaled_score_conditions():

@@ -40,6 +40,9 @@ from scoremodel_ext.manifold.upstream_style_score import (
     build_upstream_style_score_model,
     train_s2_upstream_style_score_model,
 )
+from scoremodel_ext.manifold.online_heat_teacher import (
+    train_s2_upstream_style_score_model_online_heat,
+)
 
 
 MAX_REVERSE_NOISE_STEPS = 1000
@@ -67,6 +70,12 @@ def parse_args() -> argparse.Namespace:
         choices=("effective_score", "upstream_scaled_score"),
         default="effective_score",
     )
+    parser.add_argument(
+        "--teacher-sampling",
+        choices=("fixed", "online"),
+        default="fixed",
+    )
+    parser.add_argument("--online-teacher-seed", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--data-path",
@@ -171,6 +180,16 @@ def parse_args() -> argparse.Namespace:
             "--score-parameterization upstream_scaled_score requires "
             "--teacher heat or malliavin"
         )
+    if args.teacher_sampling == "online" and (
+        args.teacher != "heat"
+        or args.score_parameterization != "upstream_scaled_score"
+    ):
+        parser.error(
+            "--teacher-sampling online currently requires --teacher heat and "
+            "--score-parameterization upstream_scaled_score"
+        )
+    if args.teacher_sampling == "online" and args.time_sampling != "uniform":
+        parser.error("--teacher-sampling online currently requires uniform time sampling")
     shard_bounds_given = (
         args.teacher_start_index is not None or args.teacher_end_index is not None
     )
@@ -2824,7 +2843,49 @@ def main() -> None:
         output_dir=output_dir,
         args=args,
     )
-    if args.score_parameterization == "upstream_scaled_score":
+    if (
+        args.score_parameterization == "upstream_scaled_score"
+        and args.teacher_sampling == "online"
+    ):
+        if not isinstance(beta_schedule, LinearBetaSchedule):
+            raise ValueError(
+                "online upstream_scaled_score training requires --beta-schedule linear"
+            )
+        model, history, training_state = (
+            train_s2_upstream_style_score_model_online_heat(
+                train_initial,
+                train_dataset,
+                beta_schedule=beta_schedule,
+                minimum_time=args.minimum_time,
+                maximum_time=args.maximum_time,
+                n_steps=args.n_steps,
+                heat_terms=args.heat_terms,
+                online_teacher_seed=(
+                    args.seed + 211
+                    if args.online_teacher_seed is None
+                    else args.online_teacher_seed
+                ),
+                n_epochs=args.epochs,
+                batch_size=args.batch_size,
+                learning_rate=args.learning_rate,
+                weight_decay=args.weight_decay,
+                hidden=args.hidden,
+                n_blocks=args.n_blocks,
+                num_frequencies=args.num_frequencies,
+                device=device,
+                return_history=True,
+                training_unit=args.training_unit,
+                updates=args.updates,
+                warmup_updates=args.warmup_updates,
+                lr_scheduler=args.lr_scheduler,
+                ema_rate=args.ema_rate,
+                checkpoint_every_updates=args.checkpoint_every_updates,
+                checkpoint_callback=checkpoint_callback,
+                return_training_state=True,
+            )
+        )
+        training_path = "upstream_scaled_score"
+    elif args.score_parameterization == "upstream_scaled_score":
         if not isinstance(beta_schedule, LinearBetaSchedule):
             raise ValueError(
                 "upstream_scaled_score training requires --beta-schedule linear"
@@ -2983,8 +3044,32 @@ def main() -> None:
         beta_t0=args.beta_t0,
         beta_tf=args.beta_tf,
     )
+    checkpoint_payload["teacher_sampling"] = args.teacher_sampling
+    checkpoint_payload["online_teacher_seed"] = (
+        training_state.get("online_teacher_seed")
+        if args.teacher_sampling == "online"
+        else None
+    )
+    checkpoint_payload["teacher_examples_generated"] = training_state.get(
+        "teacher_examples_generated"
+    )
     torch.save(checkpoint_payload, output_dir / "model.pt")
     training_run_metadata = {
+        "teacher_sampling": args.teacher_sampling,
+        "online_teacher_seed": training_state.get("online_teacher_seed"),
+        "teacher_examples_generated": training_state.get(
+            "teacher_examples_generated"
+        ),
+        "training_teacher_dataset": (
+            "fresh_per_update"
+            if args.teacher_sampling == "online"
+            else "fixed_teacher_dataset.pt"
+        ),
+        "teacher_dataset_pt_role": (
+            "normalization_and_diagnostic_reference"
+            if args.teacher_sampling == "online"
+            else "training_dataset"
+        ),
         "training_unit": args.training_unit,
         "requested_training_unit": args.training_unit,
         "requested_epochs": args.epochs,
@@ -3040,6 +3125,11 @@ def main() -> None:
         "teacher": args.teacher,
         "training_path": training_path,
         "score_parameterization": args.score_parameterization,
+        "teacher_sampling": args.teacher_sampling,
+        "online_teacher_seed": training_state.get("online_teacher_seed"),
+        "teacher_examples_generated": training_state.get(
+            "teacher_examples_generated"
+        ),
         "initial_train_loss": initial_train_loss,
         "final_train_loss": final_train_loss,
         "best_train_loss": best_train_loss,
@@ -3093,7 +3183,10 @@ def main() -> None:
     with (output_dir / "metrics.json").open("w", encoding="utf-8") as handle:
         json.dump(metrics, handle, indent=2)
 
-    log(f"teacher={args.teacher} training_path={training_path}")
+    log(
+        f"teacher={args.teacher} training_path={training_path} "
+        f"teacher_sampling={args.teacher_sampling}"
+    )
     log(f"final_train_loss={final_train_loss:.6e} validation_loss={validation_loss:.6e}")
     log(f"mmd={mmd_value:.6e} geodesic_mean={geodesic['mean']:.6e} norm_error={norm_error:.6e}")
 

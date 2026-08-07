@@ -361,6 +361,128 @@ def s2_heat_kernel_score(
     return (density_derivative / density) * grad_cosine
 
 
+def _s2_heat_kernel_score_tensor_time(
+    initial_point: Tensor,
+    endpoint: Tensor,
+    terminal_time: Tensor,
+    *,
+    n_terms: int,
+) -> Tuple[Tensor, Tensor]:
+    """Pure tensor-time form of the existing truncated Heat score.
+
+    Validation is deliberately performed by the outer batched adapter.  This
+    function contains no scalar extraction or tensor-dependent Python branch,
+    so it can be transformed with ``torch.func.vmap``.
+    """
+
+    x0 = initial_point.reshape(3)
+    x0 = x0 / torch.linalg.vector_norm(x0)
+    x = endpoint.reshape(3)
+    x = x / torch.linalg.vector_norm(x)
+    cosine = torch.clamp(torch.dot(x0, x), -1.0, 1.0)
+
+    p_prev = torch.ones((), dtype=x.dtype, device=x.device)
+    p_curr = cosine
+    dp_prev = torch.zeros_like(cosine)
+    dp_curr = torch.ones_like(cosine)
+
+    density = torch.ones_like(cosine) / (4.0 * math.pi)
+    density_derivative = torch.zeros_like(cosine)
+    weight_1 = 3.0 * torch.exp(-terminal_time) / (4.0 * math.pi)
+    density = density + weight_1 * p_curr
+    density_derivative = density_derivative + weight_1 * dp_curr
+
+    for degree in range(2, n_terms):
+        degree_float = float(degree)
+        p_next = (
+            (2.0 * degree_float - 1.0) * cosine * p_curr
+            - (degree_float - 1.0) * p_prev
+        ) / degree_float
+        dp_next = (
+            (2.0 * degree_float - 1.0) * (p_curr + cosine * dp_curr)
+            - (degree_float - 1.0) * dp_prev
+        ) / degree_float
+        weight = (
+            (2.0 * degree_float + 1.0)
+            * torch.exp(
+                -0.5
+                * degree_float
+                * (degree_float + 1.0)
+                * terminal_time
+            )
+            / (4.0 * math.pi)
+        )
+        density = density + weight * p_next
+        density_derivative = density_derivative + weight * dp_next
+        p_prev, p_curr = p_curr, p_next
+        dp_prev, dp_curr = dp_curr, dp_next
+
+    grad_cosine = x0 - cosine * x
+    return (density_derivative / density) * grad_cosine, density
+
+
+def s2_batched_heat_kernel_score(
+    initial_points: Tensor,
+    endpoints: Tensor,
+    terminal_times: Tensor,
+    *,
+    n_terms: int = 80,
+) -> Tensor:
+    """Evaluate the unchanged Heat teacher for a sample batch."""
+
+    if initial_points.ndim != 2 or initial_points.shape[1] != 3:
+        raise ValueError("initial_points must have shape [batch, 3]")
+    if endpoints.shape != initial_points.shape:
+        raise ValueError("endpoints must have the same shape as initial_points")
+    if terminal_times.shape != (initial_points.shape[0],):
+        raise ValueError("terminal_times must have shape [batch]")
+    if n_terms < 2:
+        raise ValueError("n_terms must be at least two")
+    if bool((terminal_times <= 0).any().detach().cpu()):
+        raise ValueError("all terminal_times must be positive")
+
+    score, density = torch.func.vmap(
+        lambda x0, x, t: _s2_heat_kernel_score_tensor_time(
+            x0,
+            x,
+            t,
+            n_terms=n_terms,
+        )
+    )(initial_points, endpoints, terminal_times)
+    if bool((density <= 0).any().detach().cpu()):
+        raise FloatingPointError(
+            "truncated heat-kernel series is non-positive; increase n_terms "
+            "or use a later terminal_time"
+        )
+    return score
+
+
+def s2_batched_grw_endpoint(
+    initial_points: Tensor,
+    standard_noises: Tensor,
+    terminal_times: Tensor,
+) -> Tensor:
+    """Batch the existing tensor-safe single-sample GRW endpoint map."""
+
+    if initial_points.ndim != 2 or initial_points.shape[1] != 3:
+        raise ValueError("initial_points must have shape [batch, 3]")
+    if standard_noises.ndim != 3 or standard_noises.shape[2] != 3:
+        raise ValueError("standard_noises must have shape [batch, n_steps, 3]")
+    if standard_noises.shape[0] != initial_points.shape[0]:
+        raise ValueError("standard_noises batch dimension does not match")
+    if standard_noises.shape[1] < 1:
+        raise ValueError("at least one GRW step is required")
+    if terminal_times.shape != (initial_points.shape[0],):
+        raise ValueError("terminal_times must have shape [batch]")
+    if bool((terminal_times <= 0).any().detach().cpu()):
+        raise ValueError("all terminal_times must be positive")
+    return torch.func.vmap(s2_grw_endpoint_tensor_time)(
+        initial_points,
+        standard_noises,
+        terminal_times,
+    )
+
+
 def s2_varadhan_score(
     initial_point: Tensor,
     endpoint: Tensor,
