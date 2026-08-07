@@ -35,6 +35,11 @@ from scoremodel_ext.manifold.s2_malliavin import (
     s2_varadhan_score,
 )
 from scoremodel_ext.manifold.beta_schedule import LinearBetaSchedule
+from scoremodel_ext.manifold.upstream_style_score import (
+    UpstreamStyleScoreModel,
+    build_upstream_style_score_model,
+    train_s2_upstream_style_score_model,
+)
 
 
 MAX_REVERSE_NOISE_STEPS = 1000
@@ -57,6 +62,11 @@ CURATED_LOWT_TIMES: Tuple[float, ...] = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--teacher", choices=("heat", "varadhan", "malliavin"), default=None)
+    parser.add_argument(
+        "--score-parameterization",
+        choices=("effective_score", "upstream_scaled_score"),
+        default="effective_score",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--data-path",
@@ -153,6 +163,11 @@ def parse_args() -> argparse.Namespace:
         parser.error("--teacher is required unless --skip-training is used")
     if args.teacher_implementation == "batched" and args.teacher != "malliavin":
         parser.error("--teacher-implementation batched requires --teacher malliavin")
+    if (
+        args.score_parameterization == "upstream_scaled_score"
+        and args.teacher != "heat"
+    ):
+        parser.error("--score-parameterization upstream_scaled_score requires --teacher heat")
     shard_bounds_given = (
         args.teacher_start_index is not None or args.teacher_end_index is not None
     )
@@ -620,13 +635,23 @@ def build_model_from_run_config(
     if missing:
         raise ValueError(f"run_config.json is missing model fields: {missing}")
 
+    training_path = (
+        "upstream_scaled_score"
+        if run_config.get("score_parameterization") == "upstream_scaled_score"
+        else "direct_score"
+    )
     model = _build_saved_model_architecture(
         teacher=str(run_config["teacher"]),
+        training_path=training_path,
         hidden=int(run_config["hidden"]),
         n_blocks=int(run_config["n_blocks"]),
         num_frequencies=int(run_config["num_frequencies"]),
         dtype=to_dtype(str(run_config["dtype"])),
         device=device,
+        beta_0=float(run_config.get("beta_0", 0.001)),
+        beta_f=float(run_config.get("beta_f", 5.0)),
+        beta_t0=float(run_config.get("beta_t0", 0.0)),
+        beta_tf=float(run_config.get("beta_tf", 1.0)),
     )
     return _load_saved_model_state(model, model_path)
 
@@ -634,14 +659,41 @@ def build_model_from_run_config(
 def _build_saved_model_architecture(
     *,
     teacher: str,
+    training_path: str = "direct_score",
     hidden: int,
     n_blocks: int,
     num_frequencies: int,
     dtype: torch.dtype,
     device: str,
+    beta_0: float = 0.001,
+    beta_f: float = 5.0,
+    beta_t0: float = 0.0,
+    beta_tf: float = 1.0,
 ):
     """Build the classes returned by the original two training functions."""
 
+    if training_path == "upstream_scaled_score":
+        zeros_x = torch.zeros(1, 3, dtype=dtype, device=device)
+        ones_x = torch.ones(1, 3, dtype=dtype, device=device)
+        zeros_t = torch.zeros(1, 1, dtype=dtype, device=device)
+        ones_t = torch.ones(1, 1, dtype=dtype, device=device)
+        return build_upstream_style_score_model(
+            x_mean=zeros_x,
+            x_std=ones_x,
+            t_mean=zeros_t,
+            t_std=ones_t,
+            hidden=hidden,
+            n_blocks=n_blocks,
+            num_frequencies=num_frequencies,
+            beta_schedule=LinearBetaSchedule(
+                beta_0=beta_0,
+                beta_f=beta_f,
+                t0=beta_t0,
+                tf=beta_tf,
+            ),
+            device=device,
+            dtype=dtype,
+        )
     normalized_model = _build_normalized_saved_model(
         hidden=hidden,
         n_blocks=n_blocks,
@@ -722,18 +774,27 @@ def build_model_from_training_checkpoint(model_path: Path, *, device: str):
         raise ValueError(f"model checkpoint is missing fields: {missing}")
     training_path = str(checkpoint["training_path"])
     teacher = str(checkpoint["teacher"])
-    expected_path = "marginal_skorokhod" if teacher == "malliavin" else "direct_score"
-    if training_path != expected_path:
+    expected_paths = (
+        {"marginal_skorokhod"}
+        if teacher == "malliavin"
+        else {"direct_score", "upstream_scaled_score"}
+    )
+    if training_path not in expected_paths:
         raise ValueError(
-            f"checkpoint training_path={training_path!r}, expected {expected_path!r}"
+            f"checkpoint training_path={training_path!r}, expected one of {sorted(expected_paths)!r}"
         )
     model = _build_saved_model_architecture(
         teacher=teacher,
+        training_path=training_path,
         hidden=int(checkpoint["hidden"]),
         n_blocks=int(checkpoint["n_blocks"]),
         num_frequencies=int(checkpoint["num_frequencies"]),
         dtype=to_dtype(str(checkpoint["dtype"])),
         device=device,
+        beta_0=float(checkpoint.get("beta_0", 0.001)),
+        beta_f=float(checkpoint.get("beta_f", 5.0)),
+        beta_t0=float(checkpoint.get("beta_t0", 0.0)),
+        beta_tf=float(checkpoint.get("beta_tf", 1.0)),
     )
     return _load_saved_model_state(model, model_path)
 
@@ -745,6 +806,10 @@ NORMALIZATION_BUFFER_NAMES = (
     "t_std",
     "y_mean",
     "y_std",
+    "beta_0",
+    "beta_f",
+    "beta_t0",
+    "beta_tf",
 )
 
 
@@ -752,7 +817,7 @@ def _append_normalization_stage(
     trace: Dict[str, object],
     *,
     stage: str,
-    normalized_model: NormalizedSkorokhodModel,
+    normalized_model: object,
     checkpoint_state: Dict[str, torch.Tensor],
     checkpoint_prefix: str,
 ) -> None:
@@ -760,6 +825,8 @@ def _append_normalization_stage(
     stage_matches = True
     for name in NORMALIZATION_BUFFER_NAMES:
         checkpoint_key = f"{checkpoint_prefix}{name}"
+        if checkpoint_key not in checkpoint_state or not hasattr(normalized_model, name):
+            continue
         checkpoint_value = checkpoint_state[checkpoint_key].detach().cpu()
         current_value = getattr(normalized_model, name).detach().cpu()
         same_shape = tuple(checkpoint_value.shape) == tuple(current_value.shape)
@@ -803,12 +870,29 @@ def build_model_from_training_checkpoint_with_normalization_trace(
     model_path: Path,
     *,
     device: str,
-) -> tuple[object, Dict[str, object], NormalizedSkorokhodModel, str]:
+) -> tuple[object, Dict[str, object], object, str]:
     """Rebuild the training model while tracing normalization-buffer stages."""
 
     checkpoint = torch.load(model_path, map_location="cpu")
     teacher = str(checkpoint["teacher"])
     dtype = to_dtype(str(checkpoint["dtype"]))
+    if checkpoint.get("training_path") == "upstream_scaled_score":
+        model = build_model_from_training_checkpoint(model_path, device=device)
+        trace: Dict[str, object] = {
+            "teacher": teacher,
+            "training_path": "upstream_scaled_score",
+            "model_path": str(model_path),
+            "checkpoint_prefix": "",
+            "stages": [],
+        }
+        _append_normalization_stage(
+            trace,
+            stage="1_constructor_and_load_immediately_after",
+            normalized_model=model,
+            checkpoint_state=checkpoint["state_dict"],
+            checkpoint_prefix="",
+        )
+        return model, trace, model, ""
     normalized_model = _build_normalized_saved_model(
         hidden=int(checkpoint["hidden"]),
         n_blocks=int(checkpoint["n_blocks"]),
@@ -873,11 +957,16 @@ def build_model_from_checkpoint_metadata(model_path: Path, *, device: str):
     checkpoint = torch.load(model_path, map_location="cpu")
     model = _build_saved_model_architecture(
         teacher=str(checkpoint["teacher"]),
+        training_path=str(checkpoint.get("training_path", "direct_score")),
         hidden=int(checkpoint["hidden"]),
         n_blocks=int(checkpoint["n_blocks"]),
         num_frequencies=int(checkpoint["num_frequencies"]),
         dtype=to_dtype(str(checkpoint["dtype"])),
         device=device,
+        beta_0=float(checkpoint.get("beta_0", 0.001)),
+        beta_f=float(checkpoint.get("beta_f", 5.0)),
+        beta_t0=float(checkpoint.get("beta_t0", 0.0)),
+        beta_tf=float(checkpoint.get("beta_tf", 1.0)),
     )
     return _load_saved_model_state(model, model_path)
 
@@ -1702,10 +1791,17 @@ def evaluate_dataset_loss(
         if teacher == "malliavin":
             prediction = model.skorokhod_network(dataset["time"], dataset["endpoint"])
             target = dataset["skorokhod"]
+            value = torch.mean((prediction - target) ** 2)
+        elif isinstance(model, UpstreamStyleScoreModel):
+            value = model.score_loss(
+                dataset["time"],
+                dataset["endpoint"],
+                dataset["score_target"],
+            )
         else:
             prediction = model(dataset["time"], dataset["endpoint"])
             target = dataset["score_target"]
-        value = torch.mean((prediction - target) ** 2)
+            value = torch.mean((prediction - target) ** 2)
     return float(value)
 
 
@@ -1790,6 +1886,11 @@ def build_model_checkpoint_payload(
     return {
         "teacher": teacher,
         "training_path": training_path,
+        "score_parameterization": (
+            "upstream_scaled_score"
+            if training_path == "upstream_scaled_score"
+            else "effective_score"
+        ),
         "state_dict": selected_model.state_dict(),
         "model_source": model_source,
         "online_state_dict": online_model.state_dict(),
@@ -1862,14 +1963,18 @@ def make_training_checkpoint_callback(
 
     def save_checkpoint(payload: Dict[str, object]) -> None:
         enriched = dict(payload)
-        online_state = complete_model_state(
-            enriched["online_network_state_dict"],
-            enriched["normalization_state"],
-        )
-        ema_state = complete_model_state(
-            enriched["ema_network_state_dict"],
-            enriched["normalization_state"],
-        )
+        if "complete_online_model_state_dict" in enriched:
+            online_state = enriched["complete_online_model_state_dict"]
+            ema_state = enriched["complete_ema_model_state_dict"]
+        else:
+            online_state = complete_model_state(
+                enriched["online_network_state_dict"],
+                enriched["normalization_state"],
+            )
+            ema_state = complete_model_state(
+                enriched["ema_network_state_dict"],
+                enriched["normalization_state"],
+            )
         model_source = (
             "ema" if args.use_ema_for_reverse and ema_state is not None else "online"
         )
@@ -1880,8 +1985,13 @@ def make_training_checkpoint_callback(
                 "training_path": (
                     "marginal_skorokhod"
                     if args.teacher == "malliavin"
-                    else "direct_score"
+                    else (
+                        "upstream_scaled_score"
+                        if args.score_parameterization == "upstream_scaled_score"
+                        else "direct_score"
+                    )
                 ),
+                "score_parameterization": args.score_parameterization,
                 "training_unit": args.training_unit,
                 "requested_epochs": args.epochs,
                 "requested_updates": args.updates,
@@ -2728,6 +2838,33 @@ def main() -> None:
             return_training_state=True,
         )
         training_path = "marginal_skorokhod"
+    elif args.score_parameterization == "upstream_scaled_score":
+        if not isinstance(beta_schedule, LinearBetaSchedule):
+            raise ValueError(
+                "upstream_scaled_score training requires --beta-schedule linear"
+            )
+        model, history, training_state = train_s2_upstream_style_score_model(
+            train_dataset,
+            beta_schedule=beta_schedule,
+            n_epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            hidden=args.hidden,
+            n_blocks=args.n_blocks,
+            num_frequencies=args.num_frequencies,
+            device=device,
+            return_history=True,
+            training_unit=args.training_unit,
+            updates=args.updates,
+            warmup_updates=args.warmup_updates,
+            lr_scheduler=args.lr_scheduler,
+            ema_rate=args.ema_rate,
+            checkpoint_every_updates=args.checkpoint_every_updates,
+            checkpoint_callback=checkpoint_callback,
+            return_training_state=True,
+        )
+        training_path = "upstream_scaled_score"
     else:
         model, history, training_state = train_s2_score_model(
             train_dataset,
